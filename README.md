@@ -117,7 +117,7 @@ plate_client/
 }
 ```
 
-配置文件不得包含用户名、密码、访问令牌或 MQTT 密码。`allowInsecureTransport` 默认必须为 `false`；任何模式都不得静默忽略 TLS 证书错误。
+配置文件只允许示例中的三个字段，不得包含用户名、密码、访问令牌、MQTT 密码或其他未知字段。`loginBaseUrl` 可包含路径前缀，但不得包含查询参数、片段或用户信息。`allowInsecureTransport` 默认必须为 `false`；任何模式都不得静默忽略 TLS 证书错误。
 
 ## 本地数据边界
 

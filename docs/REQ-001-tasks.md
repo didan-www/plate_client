@@ -136,7 +136,8 @@ TASK-002 已验收。
 **实现内容**
 
 - 定义 `BootstrapConfig` 值类型和 `BootstrapConfigLoader`。
-- 校验 `clientId` 为 UUID、`loginBaseUrl` 为合法 HTTP/HTTPS 基址、`allowInsecureTransport` 为 boolean。
+- 校验 `clientId` 为 UUID、`loginBaseUrl` 为合法 HTTP/HTTPS 基址、`allowInsecureTransport` 为 boolean；基址可包含路径前缀，但拒绝查询参数、片段和用户信息。
+- 配置只允许三个规定字段，任何未知字段均拒绝。
 - 缺少 `allowInsecureTransport` 时使用已确认默认值 `false`。
 - 当明文地址未被显式允许、配置缺失、JSON 非法或字段错误时返回阻断错误，不提供隐式地址。
 - 提供不含凭据的示例配置。

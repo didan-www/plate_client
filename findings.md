@@ -12,6 +12,9 @@
 - 本次仅实现和验收 `TASK-002`，不得提前实现 `TASK-003` 引导配置或后续业务。
 - 应用首版版本由用户确认为 `0.1.1`。
 - 必须建立可配置、编译、启动、CTest 可发现并运行 Qt Test 的最小 Widgets 工程。
+- 本次仅实现和验收 `TASK-003`，不得提前实现 `TASK-004` 日志或后续业务。
+- 用户确认 `loginBaseUrl` 可包含路径前缀，但必须拒绝查询参数、片段和用户信息。
+- 用户确认配置严格只允许 `clientId`、`loginBaseUrl`、`allowInsecureTransport`，未知字段必须拒绝。
 
 ## 研究发现
 
@@ -47,6 +50,9 @@
 - 需求只规定 CMake 注入版本与构建日期；版本值原未定义，用户已明确为 `0.1.1`。
 - TASK-002 冒烟测试通过直接使用对应类型，确保 Widgets、Network、Concurrent、Mqtt 和 Test 均真正进入配置/编译/链接闭环。
 - 应用 `--smoke-test` 模式仍创建并显示窗口、进入 Qt 事件循环，只增加 100 ms 后自动退出，便于确定性启动验收。
+- TASK-003 配置库只依赖 Qt Core，不创建 QWidget、`QNetworkAccessManager` 或 `QMqttClient`；程序目录入口固定解析 `config/client.json`。
+- 所有失败结果均不携带部分配置对象，错误信息不回显配置值、未知字段名或文件内容。
+- `config/client.json` 已忽略，仓库只保留不含凭据的 `client.json.example`；测试全部使用 `QTemporaryDir`。
 
 ## 技术决策
 
@@ -60,6 +66,8 @@
 | 仅为验收在 `.deps` 内准备 Qt 6.11.1 Kit | 全局固定 Qt 前缀缺失；项目内临时 Kit 不修改全局 Qt，且随 `.deps/` 统一忽略 |
 | TASK-002 使用 CMake `project(VERSION 0.1.1)` 作为版本唯一来源 | 避免应用显示值和未来心跳 `appVersion` 分叉 |
 | 构建日期采用 CMake 配置时本地日期 `YYYY-MM-DD` | 满足 CMake 注入要求，格式稳定且不涉及协议时间字段 |
+| TASK-003 使用只读访问器的 `BootstrapConfig` 值对象 | 满足不可变值对象要求，不暴露字段修改入口 |
+| 配置加载结果明确区分成功值和可展示错误 | 非法配置不产生部分对象，也不提供隐式服务器值 |
 
 ## 遇到的问题
 

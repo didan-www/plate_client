@@ -146,6 +146,8 @@ src/
 - `loginBaseUrl`
 - `allowInsecureTransport`
 
+该类型是只提供只读访问的不可变值对象。加载器严格拒绝三个规定字段之外的任何字段；`loginBaseUrl` 可包含路径前缀，但不得包含查询参数、片段或用户信息。加载失败只返回可展示错误，不产生部分配置对象或隐式服务器地址。
+
 ### 7.2 `SessionContext`
 
 | 字段 | C++/Qt 类型 | 说明 |
