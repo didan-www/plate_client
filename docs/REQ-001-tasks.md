@@ -175,10 +175,10 @@ TASK-003 已验收。
 
 **实现内容**
 
-- 在 `QStandardPaths::AppLocalDataLocation/logs` 按本地日期写日志。
-- 记录时间、级别、模块、错误码、`requestId`、可选 `recognitionId` 和必要上下文。
-- 对 Authorization、密码、访问令牌、MQTT 密码和敏感响应执行统一脱敏。
-- 启动时清理超过 7 天的日志；日志失败不得阻塞应用或网络流程。
+- 在 `QStandardPaths::AppLocalDataLocation/logs` 按本地日期追加 UTF-8 JSON Lines，文件名固定为 `plate-client-YYYY-MM-DD.log`。
+- 每行记录 `timestamp`、`level`、`module`、`errorCode`、`requestId`、可选 `recognitionId` 和 `context`。
+- 按敏感键名和文本模式对 Authorization/Bearer、密码、访问令牌、通用 Token 和 MQTT 密码执行统一脱敏，并省略完整 HTTP/MQTT 响应、完整 MQTT 载荷和图片内容。
+- 启动时只清理日期早于“当前本地日期减 7 天”的固定格式日志，恰好 7 天前的日志保留；日志失败不得阻塞应用或网络流程。
 
 **预计修改文件**
 

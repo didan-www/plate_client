@@ -490,10 +490,10 @@ sequenceDiagram
 
 ## 18. 技术日志
 
-- 采用 Qt 文件 API 实现简单按日日志，不引入日志框架。
-- 文件名包含本地日期，启动时删除超过 7 天的日志。
-- 记录时间、级别、模块、错误码、requestId、recognitionId 和必要上下文。
-- 不记录密码、令牌、MQTT 密码、Authorization 头、完整 MQTT 载荷或完整图片响应。
+- 采用 Qt 文件 API 追加 UTF-8 JSON Lines，不引入日志框架；文件名固定为 `plate-client-YYYY-MM-DD.log`。
+- 每行固定记录 `timestamp`、`level`、`module`、`errorCode`、`requestId`、可选 `recognitionId` 和 `context`。
+- 启动时只删除日期早于“当前本地日期减 7 天”的固定格式日志，恰好 7 天前的日志保留；无效日期、其他文件和符号链接不处理。
+- 按敏感键名和文本模式统一脱敏 Authorization/Bearer、密码、访问令牌、通用 Token 和 MQTT 密码；完整 HTTP/MQTT 响应、完整 MQTT 载荷和图片内容统一省略。
 - 日志写入失败不得阻止应用启动或网络流程。
 
 ## 19. 安全设计
