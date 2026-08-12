@@ -110,3 +110,14 @@
 ## 视觉/浏览器发现
 
 - 本任务未使用视觉或浏览器资源。
+
+## TASK-005 已确认契约（2026-08-12）
+
+- 登录 JSON 编解码得到 `generation=0` 的 `SessionContext`，TASK-007 再分配实际正数会话代次。
+- `RequestContext` 使用 `QVariantMap` 保存筛选条件快照，领域层不暴露 `QJsonObject`。
+- HTTP 信封和全部 DTO 严格拒绝未知字段、缺失字段及错误 JSON 类型。
+- Qt JSON 数字仅接受有限、整数、处于目标范围且可无损表示的值；大于 `2^53-1` 的 JSON number 拒绝。
+- `createdBy` 必须非空；服务端车牌必须已规范化，TASK-005 只校验、不转换。
+- 协议错误包含稳定枚举、字段路径和安全展示消息，失败时不产生部分 DTO。
+- 所有协议时间必须是有效 ISO 8601 文本，原文明确带 `+08:00` 且解析结果保持该偏移。
+- 领域/协议库只依赖 Qt Core，不得依赖 QWidget、`QNetworkReply` 或 `QMqttClient`。

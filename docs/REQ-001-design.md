@@ -162,6 +162,8 @@ src/
 
 `SessionContext` 只存在内存中。销毁或替换会话时清空敏感字符串。
 
+登录协议编解码先生成 `generation=0` 的 `SessionContext`；`SessionService` 在建立会话时替换为实际正数代次，协议层不得自行生成会话代次。
+
 ### 7.3 `RecognitionSnapshot`
 
 | 字段 | C++/Qt 类型 |
@@ -204,6 +206,8 @@ src/
 
 每个异步响应必须携带或闭包捕获不可变 `RequestContext`。
 
+筛选条件快照使用按值保存的 `QVariantMap`；领域层不使用或暴露 `QJsonObject`。
+
 ### 7.6 HTTP DTO
 
 基础设施层使用两个通用值类型，不向 UI 暴露 `QJsonObject`：
@@ -229,6 +233,8 @@ src/
 | 图片、CSV | 不使用 JSON 信封的流式二进制响应 |
 
 字段类型、可空性、状态约束、CSV 列顺序以及 2 MB JSON 响应上限以 REQ-001 第 8 章为准。任何 DTO 解析失败均返回协议错误，不把部分对象交给应用服务。
+
+协议编解码严格拒绝未知字段。由于 Qt JSON 数字以双精度表示，64 位 integer 只接受有限、无小数且绝对值不超过 `2^53-1` 的 JSON number。结构化协议错误固定包含稳定错误枚举、字段路径和可安全展示的消息。
 
 ## 8. 执行和线程模型
 
