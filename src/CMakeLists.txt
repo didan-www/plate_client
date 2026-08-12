@@ -38,6 +38,29 @@ add_library(
     infrastructure/http/JsonCodecs.cpp
 )
 
+add_library(
+    plate_client_http STATIC
+    infrastructure/http/HttpRequestPolicy.h
+    infrastructure/http/HttpError.h
+    infrastructure/http/HttpClient.h
+    infrastructure/http/HttpClient.cpp
+)
+
+plate_client_apply_project_options(plate_client_http)
+
+target_include_directories(
+    plate_client_http
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_http
+    PUBLIC
+        Qt6::Core
+        Qt6::Network
+)
+
 plate_client_apply_project_options(plate_client_protocol)
 
 target_include_directories(

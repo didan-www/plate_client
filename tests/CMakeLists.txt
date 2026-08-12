@@ -23,11 +23,19 @@ add_executable(
     http/tst_json_codecs.cpp
 )
 
+add_executable(
+    tst_http_client
+    http/tst_http_client.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
 plate_client_apply_project_options(tst_smoke)
 plate_client_apply_project_options(tst_bootstrap_config)
 plate_client_apply_project_options(tst_technical_logger)
 plate_client_apply_project_options(tst_domain_types)
 plate_client_apply_project_options(tst_json_codecs)
+plate_client_apply_project_options(tst_http_client)
 
 target_link_libraries(
     tst_smoke
@@ -67,11 +75,22 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_http_client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_http_client
+    PRIVATE
+        plate_client_http
+        Qt6::Network
+        Qt6::Test
+)
+
 add_test(NAME unit.smoke COMMAND tst_smoke)
 add_test(NAME unit.bootstrap_config COMMAND tst_bootstrap_config)
 add_test(NAME unit.technical_logger COMMAND tst_technical_logger)
 add_test(NAME unit.domain_types COMMAND tst_domain_types)
 add_test(NAME unit.json_codecs COMMAND tst_json_codecs)
+add_test(NAME unit.http_client COMMAND tst_http_client)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
 
 set_tests_properties(
@@ -80,6 +99,7 @@ set_tests_properties(
     unit.technical_logger
     unit.domain_types
     unit.json_codecs
+    unit.http_client
     app.startup
     PROPERTIES
         TIMEOUT 10
