@@ -42,6 +42,11 @@ public:
     {
     }
 
+    HttpRequest(const HttpRequest &) = delete;
+    HttpRequest &operator=(const HttpRequest &) = delete;
+    HttpRequest(HttpRequest &&) noexcept = default;
+    HttpRequest &operator=(HttpRequest &&) noexcept = default;
+
     [[nodiscard]] HttpMethod method() const noexcept { return method_; }
     [[nodiscard]] const QUrl &url() const noexcept { return url_; }
     [[nodiscard]] HttpRequestKind kind() const noexcept { return kind_; }
@@ -130,7 +135,7 @@ public:
                TimeoutResolver timeoutResolver,
                QObject *parent = nullptr);
 
-    [[nodiscard]] HttpRequestHandle *send(const HttpRequest &request);
+    [[nodiscard]] HttpRequestHandle *send(HttpRequest &&request);
 
 private:
     QNetworkAccessManager *networkManager_;

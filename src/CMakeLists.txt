@@ -46,6 +46,15 @@ add_library(
     infrastructure/http/HttpClient.cpp
 )
 
+add_library(
+    plate_client_auth STATIC
+    infrastructure/http/AuthError.h
+    infrastructure/http/AuthApiClient.h
+    infrastructure/http/AuthApiClient.cpp
+    services/SessionService.h
+    services/SessionService.cpp
+)
+
 plate_client_apply_project_options(plate_client_http)
 
 target_include_directories(
@@ -59,6 +68,22 @@ target_link_libraries(
     PUBLIC
         Qt6::Core
         Qt6::Network
+)
+
+plate_client_apply_project_options(plate_client_auth)
+
+target_include_directories(
+    plate_client_auth
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_auth
+    PUBLIC
+        plate_client_http
+        plate_client_protocol
+        Qt6::Core
 )
 
 plate_client_apply_project_options(plate_client_protocol)

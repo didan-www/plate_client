@@ -485,15 +485,17 @@ ProtocolResult<HttpEnvelope<T>> parseEnvelope(const QByteArray &json,
         if (!emptyData.isSuccess()) {
             return ProtocolResult<HttpEnvelope<T>>::failure(*emptyData.error());
         }
+        std::optional<T> value = emptyData.takeValue();
         return ProtocolResult<HttpEnvelope<T>>::success(
             HttpEnvelope<T>(true, *code.value(), *message.value(), *requestId.value(),
-                            std::move(*emptyData.value())));
+                            std::move(value)));
     }
     if (!data.isObject()) return ProtocolResult<HttpEnvelope<T>>::failure(typeMismatch(QStringLiteral("$.data")));
     ProtocolResult<T> parsedData = dataParser(data.toObject(), QStringLiteral("$.data"));
     if (!parsedData.isSuccess()) return ProtocolResult<HttpEnvelope<T>>::failure(*parsedData.error());
+    std::optional<T> value = parsedData.takeValue();
     return ProtocolResult<HttpEnvelope<T>>::success(HttpEnvelope<T>(
-        true, *code.value(), *message.value(), *requestId.value(), std::move(*parsedData.value())));
+        true, *code.value(), *message.value(), *requestId.value(), std::move(value)));
 }
 
 ProtocolResult<QByteArray> encodeJsonObject(const QJsonObject &object)

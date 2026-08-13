@@ -55,6 +55,13 @@ public:
     [[nodiscard]] const std::optional<T> &value() const noexcept { return value_; }
     [[nodiscard]] const std::optional<ProtocolError> &error() const noexcept { return error_; }
 
+    [[nodiscard]] std::optional<T> takeValue() noexcept
+    {
+        std::optional<T> result = std::move(value_);
+        value_.reset();
+        return result;
+    }
+
 private:
     explicit ProtocolResult(T value)
         : value_(std::move(value))

@@ -7,6 +7,13 @@
 
 #include <QtTest>
 
+#include <type_traits>
+
+static_assert(!std::is_copy_constructible_v<SessionContext>);
+static_assert(!std::is_copy_assignable_v<SessionContext>);
+static_assert(std::is_move_constructible_v<SessionContext>);
+static_assert(std::is_move_assignable_v<SessionContext>);
+
 class DomainTypesTest final : public QObject
 {
     Q_OBJECT

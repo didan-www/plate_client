@@ -81,6 +81,7 @@ flowchart TB
 | `MqttRecognitionSubscriber` | MQTT 连接、重连、订阅、事件解析和连接状态通知 |
 
 `SessionService` 是访问令牌和 MQTT 凭据的唯一所有者。UI 只能获得显示名、到期提示和连接状态，不得读取或记录凭据。
+`AuthApiClient` 登录成功后直接把完整 `SessionContext` 移交给 `SessionService`，只向调用方返回不含凭据的 `SessionSummary`。HTTP/MQTT 基础设施按当前会话代次通过短生命周期回调临时使用凭据，不返回可长期保存的凭据副本。
 
 ### 5.3 实时识别
 
@@ -161,8 +162,10 @@ src/
 | `generation` | `quint64` | 登录会话代次 |
 
 `SessionContext` 只存在内存中。销毁或替换会话时清空敏感字符串。
+该类型不可复制，只允许移动；访问令牌、MQTT 用户名和密码在销毁、替换或移动后显式覆盖清空。
 
 登录协议编解码先生成 `generation=0` 的 `SessionContext`；`SessionService` 在建立会话时替换为实际正数代次，协议层不得自行生成会话代次。
+未登录状态下仅 `auth.login` 请求允许使用代次 `0`；建立会话后该登录上下文失效。会话摘要只包含显示名、到期时间和正数代次。
 
 ### 7.3 `RecognitionSnapshot`
 
@@ -309,6 +312,7 @@ stateDiagram-v2
 ```
 
 合法的 4xx/5xx 证明 HTTP 服务可访问，但具体请求仍按失败处理。401 额外触发会话退出。
+每个 401 携带原请求的会话代次；`SessionService` 只接受当前代次的首次通知，重复通知和旧代次通知不再次触发失效信号。
 
 ### 9.3 MQTT 状态
 
@@ -477,6 +481,8 @@ sequenceDiagram
 5. 断开 MQTT 并清除订阅。
 6. 清空实时记录、页面模型、当前图片、访问令牌和 MQTT 凭据。
 7. 销毁主窗口并显示登录页，或结束进程；关闭应用时不等待注销响应。
+
+尽力注销在第 4 步将 Token 移交给只移动的 `HttpRequest` 后立即执行后续本地清理；注销超时、网络失败或错误响应均不得恢复会话。
 
 所有回调使用 QObject 上下文连接或 QPointer 防护，不捕获无生命周期保证的 QWidget 裸指针。
 

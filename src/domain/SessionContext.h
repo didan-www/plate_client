@@ -32,10 +32,48 @@ public:
     {
     }
 
+    SessionContext(const SessionContext &) = delete;
+    SessionContext &operator=(const SessionContext &) = delete;
+
+    SessionContext(SessionContext &&other) noexcept
+        : displayName_(std::move(other.displayName_))
+        , accessToken_(std::move(other.accessToken_))
+        , expiresAt_(std::move(other.expiresAt_))
+        , mqttHost_(std::move(other.mqttHost_))
+        , mqttPort_(other.mqttPort_)
+        , mqttTls_(other.mqttTls_)
+        , mqttUsername_(std::move(other.mqttUsername_))
+        , mqttPassword_(std::move(other.mqttPassword_))
+        , mqttEventTopic_(std::move(other.mqttEventTopic_))
+        , generation_(other.generation_)
+    {
+        other.clearSensitiveData();
+        other.generation_ = 0;
+    }
+
+    SessionContext &operator=(SessionContext &&other) noexcept
+    {
+        if (this != &other) {
+            clearSensitiveData();
+            displayName_ = std::move(other.displayName_);
+            accessToken_ = std::move(other.accessToken_);
+            expiresAt_ = std::move(other.expiresAt_);
+            mqttHost_ = std::move(other.mqttHost_);
+            mqttPort_ = other.mqttPort_;
+            mqttTls_ = other.mqttTls_;
+            mqttUsername_ = std::move(other.mqttUsername_);
+            mqttPassword_ = std::move(other.mqttPassword_);
+            mqttEventTopic_ = std::move(other.mqttEventTopic_);
+            generation_ = other.generation_;
+            other.clearSensitiveData();
+            other.generation_ = 0;
+        }
+        return *this;
+    }
+
     ~SessionContext()
     {
-        accessToken_.clear();
-        mqttPassword_.clear();
+        clearSensitiveData();
     }
 
     [[nodiscard]] const QString &displayName() const noexcept { return displayName_; }
@@ -50,6 +88,21 @@ public:
     [[nodiscard]] quint64 generation() const noexcept { return generation_; }
 
 private:
+    friend class SessionService;
+
+    static void clearString(QString &value) noexcept
+    {
+        value.fill(QChar::Null);
+        value.clear();
+    }
+
+    void clearSensitiveData() noexcept
+    {
+        clearString(accessToken_);
+        clearString(mqttUsername_);
+        clearString(mqttPassword_);
+    }
+
     QString displayName_;
     QString accessToken_;
     QDateTime expiresAt_;

@@ -139,40 +139,41 @@ HttpClient::HttpClient(QNetworkAccessManager *networkManager,
     Q_ASSERT(networkManager_);
 }
 
-HttpRequestHandle *HttpClient::send(const HttpRequest &request)
+HttpRequestHandle *HttpClient::send(HttpRequest &&request)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     auto *handle = new HttpRequestHandle(this);
-    auto *state = new RequestState(request, contextValidator_, handle);
+    auto *state = new RequestState(std::move(request), contextValidator_, handle);
     connect(handle, &HttpRequestHandle::finished, handle, &QObject::deleteLater);
 
-    QNetworkRequest networkRequest(request.url());
+    QNetworkRequest networkRequest(state->request.url());
     networkRequest.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                                 QNetworkRequest::ManualRedirectPolicy);
     networkRequest.setRawHeader(QByteArrayLiteral("Accept"),
-                                HttpRequestPolicy::acceptHeader(request.responseMode()));
-    if (request.responseMode() == HttpResponseMode::JsonMemory) {
+                                HttpRequestPolicy::acceptHeader(state->request.responseMode()));
+    if (state->request.responseMode() == HttpResponseMode::JsonMemory) {
         networkRequest.setHeader(QNetworkRequest::ContentTypeHeader,
                                  QByteArrayLiteral("application/json"));
     }
-    if (!request.bearerToken().isEmpty()) {
+    if (!state->request.bearerToken().isEmpty()) {
         networkRequest.setRawHeader(QByteArrayLiteral("Authorization"),
                                     QByteArrayLiteral("Bearer ")
-                                        + request.bearerToken().toUtf8());
+                                        + state->request.bearerToken().toUtf8());
     }
 
-    switch (request.method()) {
+    switch (state->request.method()) {
     case HttpMethod::Get:
         state->reply = networkManager_->get(networkRequest);
         break;
     case HttpMethod::Post:
-        state->reply = networkManager_->post(networkRequest, request.body());
+        state->reply = networkManager_->post(networkRequest, state->request.body());
         break;
     case HttpMethod::Delete:
-        state->reply = request.body().isEmpty()
+        state->reply = state->request.body().isEmpty()
                            ? networkManager_->deleteResource(networkRequest)
                            : networkManager_->sendCustomRequest(
-                                 networkRequest, QByteArrayLiteral("DELETE"), request.body());
+                                 networkRequest, QByteArrayLiteral("DELETE"),
+                                 state->request.body());
         break;
     }
 
@@ -462,8 +463,8 @@ HttpRequestHandle *HttpClient::send(const HttpRequest &request)
             });
 
     const std::chrono::milliseconds timeout = timeoutResolver_
-                                                  ? timeoutResolver_(request.kind())
-                                                  : HttpRequestPolicy::timeout(request.kind());
+                                                  ? timeoutResolver_(state->request.kind())
+                                                  : HttpRequestPolicy::timeout(state->request.kind());
     const qint64 timeoutCount = timeout.count();
     const int timerInterval = timeoutCount > std::numeric_limits<int>::max()
                                   ? std::numeric_limits<int>::max()

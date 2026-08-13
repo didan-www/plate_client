@@ -140,3 +140,20 @@
 - 显式取消只回调一次 `Cancelled`；完成前使用注入校验函数检查上下文，失效只回调 `StaleResponse`。
 - 禁止跟随重定向，避免 Bearer Token 泄漏；TASK-006 不执行任何自动重试。
 - Bearer Token 为可选内存参数；JSON、图片、CSV 分别设置适用的 `Accept`/`Content-Type`。
+
+## TASK-007 已确认契约（2026-08-13）
+
+- `AuthApiClient` 只产生短生命周期的认证 DTO；成功会话立即移交 `SessionService`，后者是访问令牌和 MQTT 凭据的唯一长期持有者。
+- `SessionService` 对外只暴露显示名、到期时间和 `sessionGeneration`；基础设施按当前会话代次临时读取凭据，传输请求结束后清除内部副本。
+- 认证错误区分参数、401、403、5xx、网络、TLS、超时、取消、旧响应和协议错误；4xx/5xx 必须严格解析统一错误信封且不保留完整敏感响应。
+- 业务 HTTP 401 携带原会话代次通知 `SessionService`；只有当前代次的首次通知触发一次统一失效，重复或旧代次 401 忽略。
+- 尽力注销先使用当前令牌发出 5 秒请求，再立即清理本地会话；注销结果不恢复会话，也不延迟本地退出。
+- 登录响应若已到期则拒绝建立会话；不实现刷新令牌。
+
+## TASK-007 实现发现（2026-08-13）
+
+- 登录请求上下文使用 `sessionGeneration=0`；`SessionService::isCurrent` 只在未登录且操作为 `auth.login` 时接受，建立会话后立即拒绝旧登录上下文。
+- `SessionContext` 和 `HttpRequest` 均为只移动类型；协议结果和信封提供移动取值，避免为 Token、MQTT 凭据和登录请求体保留额外长期副本。
+- `AuthApiClient` 直接建立 `SessionService` 会话，登录句柄仅暴露 `SessionSummary`；认证调用方不能取得完整会话凭据。
+- 会话失效递增代次并停止到期定时器；当前代次的首次 401 生效，重复和旧代次 401 均被忽略。
+- 尽力注销先把 Token 转移给 5 秒异步请求，再同步清理本地会话；后续成功、失败、超时或取消均不恢复会话。

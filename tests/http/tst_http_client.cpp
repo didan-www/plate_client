@@ -154,11 +154,11 @@ void HttpClientTest::sendsHeadersMethodBodyAndContext()
     HttpClient client;
     const QByteArray requestBody = QByteArrayLiteral("{\"name\":\"value\"}");
     const RequestContext requestContext(7, 9, QStringLiteral("access.create"));
-    const HttpRequest request(HttpMethod::Post, server.url(QStringLiteral("/api/items")),
+    HttpRequest request(HttpMethod::Post, server.url(QStringLiteral("/api/items")),
                               HttpRequestKind::AccessListWrite,
                               HttpResponseMode::JsonMemory, requestContext, requestBody,
                               QStringLiteral("secret-token"));
-    HttpRequestHandle *handle = client.send(request);
+    HttpRequestHandle *handle = client.send(std::move(request));
     QSignalSpy success(handle, &HttpRequestHandle::succeeded);
     QSignalSpy failure(handle, &HttpRequestHandle::failed);
 
@@ -186,10 +186,10 @@ void HttpClientTest::sendsDeleteRequestBody()
     server.enqueueResponse(jsonResponse());
     HttpClient client;
     const QByteArray body = QByteArrayLiteral("{\"plateNumber\":\"京A12345\"}");
-    const HttpRequest request(HttpMethod::Delete, server.url(QStringLiteral("/api/items/5")),
+    HttpRequest request(HttpMethod::Delete, server.url(QStringLiteral("/api/items/5")),
                               HttpRequestKind::AccessListWrite,
                               HttpResponseMode::JsonMemory, context(), body);
-    HttpRequestHandle *handle = client.send(request);
+    HttpRequestHandle *handle = client.send(std::move(request));
     QSignalSpy success(handle, &HttpRequestHandle::succeeded);
 
     QVERIFY(success.wait());
@@ -227,10 +227,10 @@ void HttpClientTest::acceptsImageAtExactLimit()
     image.chunks.append(QByteArray(HttpRequestPolicy::imageMaximumBytes, 'i'));
     server.enqueueResponse(std::move(image));
     HttpClient client;
-    const HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/image")),
+    HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/image")),
                               HttpRequestKind::Image, HttpResponseMode::ImageMemory,
                               context());
-    HttpRequestHandle *handle = client.send(request);
+    HttpRequestHandle *handle = client.send(std::move(request));
     QSignalSpy success(handle, &HttpRequestHandle::succeeded);
     QSignalSpy failure(handle, &HttpRequestHandle::failed);
 
@@ -268,10 +268,10 @@ void HttpClientTest::rejectsDeclaredAndChunkedOversize()
     image.headers.append({QByteArrayLiteral("Content-Type"), QByteArrayLiteral("image/png")});
     image.declaredContentLength = HttpRequestPolicy::imageMaximumBytes + 1;
     server.enqueueResponse(image);
-    const HttpRequest imageRequest(HttpMethod::Get, server.url(QStringLiteral("/image")),
+    HttpRequest imageRequest(HttpMethod::Get, server.url(QStringLiteral("/image")),
                                    HttpRequestKind::Image, HttpResponseMode::ImageMemory,
                                    context());
-    HttpRequestHandle *imageHandle = client.send(imageRequest);
+    HttpRequestHandle *imageHandle = client.send(std::move(imageRequest));
     QSignalSpy imageFailure(imageHandle, &HttpRequestHandle::failed);
     QVERIFY(imageFailure.wait());
     QCOMPARE(errorFrom(imageFailure).code(), HttpErrorCode::ResponseTooLarge);
@@ -287,9 +287,9 @@ void HttpClientTest::streamsCsvWithoutBuffering()
     csv.chunkDelayMs = 5;
     server.enqueueResponse(csv);
     HttpClient client;
-    const HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/export")),
+    HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/export")),
                               HttpRequestKind::Csv, HttpResponseMode::CsvStream, context());
-    HttpRequestHandle *handle = client.send(request);
+    HttpRequestHandle *handle = client.send(std::move(request));
     QSignalSpy chunks(handle, &HttpRequestHandle::dataChunkReceived);
     QSignalSpy success(handle, &HttpRequestHandle::succeeded);
 
@@ -309,9 +309,9 @@ void HttpClientTest::preservesJsonErrorForCsvRequest()
     QVERIFY(server.listen());
     server.enqueueResponse(jsonResponse(403, QByteArrayLiteral("{\"success\":false}")));
     HttpClient client;
-    const HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/export")),
+    HttpRequest request(HttpMethod::Get, server.url(QStringLiteral("/export")),
                               HttpRequestKind::Csv, HttpResponseMode::CsvStream, context());
-    HttpRequestHandle *handle = client.send(request);
+    HttpRequestHandle *handle = client.send(std::move(request));
     QSignalSpy chunks(handle, &HttpRequestHandle::dataChunkReceived);
     QSignalSpy failure(handle, &HttpRequestHandle::failed);
 
@@ -368,10 +368,10 @@ void HttpClientTest::rejectsRedirectsWithoutFollowing()
     QCOMPARE(server.requests().size(), 1);
     QCOMPARE(server.requests().first().target, QByteArrayLiteral("/redirect"));
 
-    const HttpRequest csvRequest(HttpMethod::Get, server.url(QStringLiteral("/csv-redirect")),
+    HttpRequest csvRequest(HttpMethod::Get, server.url(QStringLiteral("/csv-redirect")),
                                  HttpRequestKind::Csv, HttpResponseMode::CsvStream,
                                  context());
-    HttpRequestHandle *csvHandle = client.send(csvRequest);
+    HttpRequestHandle *csvHandle = client.send(std::move(csvRequest));
     QSignalSpy csvFailure(csvHandle, &HttpRequestHandle::failed);
     QVERIFY(csvFailure.wait());
     QCOMPARE(errorFrom(csvFailure).code(), HttpErrorCode::RedirectRejected);

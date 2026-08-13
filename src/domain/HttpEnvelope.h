@@ -32,6 +32,13 @@ public:
     [[nodiscard]] const QString &requestId() const noexcept { return requestId_; }
     [[nodiscard]] const std::optional<T> &data() const noexcept { return data_; }
 
+    [[nodiscard]] std::optional<T> takeData() noexcept
+    {
+        std::optional<T> result = std::move(data_);
+        data_.reset();
+        return result;
+    }
+
 private:
     bool success_;
     QString code_;
