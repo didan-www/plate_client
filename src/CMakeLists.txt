@@ -55,6 +55,23 @@ add_library(
     services/SessionService.cpp
 )
 
+add_library(
+    plate_client_ui STATIC
+    ui/windows/LoginWindow.h
+    ui/windows/LoginWindow.cpp
+    ui/resources/plate_client.qrc
+)
+
+set_target_properties(plate_client_ui PROPERTIES AUTORCC ON)
+
+add_library(
+    plate_client_app STATIC
+    app/Application.h
+    app/Application.cpp
+    app/AppController.h
+    app/AppController.cpp
+)
+
 plate_client_apply_project_options(plate_client_http)
 
 target_include_directories(
@@ -84,6 +101,39 @@ target_link_libraries(
         plate_client_http
         plate_client_protocol
         Qt6::Core
+)
+
+plate_client_apply_project_options(plate_client_ui)
+
+target_include_directories(
+    plate_client_ui
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_ui
+    PUBLIC
+        Qt6::Widgets
+)
+
+plate_client_apply_project_options(plate_client_app)
+
+target_include_directories(
+    plate_client_app
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_app
+    PUBLIC
+        plate_client_auth
+        plate_client_config
+        plate_client_http
+        plate_client_logging
+        plate_client_ui
+        Qt6::Widgets
 )
 
 plate_client_apply_project_options(plate_client_protocol)
@@ -121,7 +171,7 @@ add_executable(
 
 plate_client_apply_project_options(plate_client)
 
-target_link_libraries(plate_client PRIVATE plate_client_config plate_client_logging)
+target_link_libraries(plate_client PRIVATE plate_client_app)
 
 target_link_libraries(
     plate_client
@@ -130,4 +180,14 @@ target_link_libraries(
         Qt6::Network
         Qt6::Concurrent
         Qt6::Mqtt
+)
+
+add_custom_command(
+    TARGET plate_client
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:plate_client>/config"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${PROJECT_SOURCE_DIR}/config/client.json.example"
+            "$<TARGET_FILE_DIR:plate_client>/config/client.json"
+    VERBATIM
 )

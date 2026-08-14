@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/images/login">
+        <file alias="login_logo.png">images/login/login_logo.png</file>
+        <file alias="login_user.png">images/login/login_user.png</file>
+        <file alias="login_pwd.png">images/login/login_pwd.png</file>
+    </qresource>
+</RCC>

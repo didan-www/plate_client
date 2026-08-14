@@ -157,3 +157,26 @@
 - `AuthApiClient` 直接建立 `SessionService` 会话，登录句柄仅暴露 `SessionSummary`；认证调用方不能取得完整会话凭据。
 - 会话失效递增代次并停止到期定时器；当前代次的首次 401 生效，重复和旧代次 401 均被忽略。
 - 尽力注销先把 Token 转移给 5 秒异步请求，再同步清理本地会话；后续成功、失败、超时或取消均不恢复会话。
+
+## TASK-008 已确认契约（2026-08-14）
+
+- `AppController` 通过可注入窗口工厂创建登录成功后的窗口；TASK-008 生产工厂暂时返回最小承接窗口，TASK-009 将其替换为正式 `MainWindow`。
+- 临时承接窗口不实现导航、状态栏、页面容器或 TASK-009 的 `MainWindow` 类型，最终不会与正式主窗口并存。
+- 非法引导配置使用阻断错误并退出，配置通过前不创建 HTTP、认证或会话对象。
+- `QSettings` 固定只使用 `login/lastUsername`，仅登录成功后保存；密码在每次登录完成后清空，不写设置或日志。
+- 登录错误在按钮下方以内联文本展示，失败后恢复输入和提交；登录成功不等待 MQTT。
+## TASK-008 最终审查发现（2026-08-14）
+
+- `Application` 仅在引导配置通过后创建日志、会话、HTTP、认证、设置和控制器；成员声明顺序确保控制器先于其依赖销毁。
+- `AppController` 仅通过 `QSettings` 的 `login/lastUsername` 持久化用户名；登录成功或失败均清空密码，在途登录在控制器析构时取消。
+- TASK-008 的默认认证后窗口是无导航、无连接状态、无页面容器的最小承接窗口；TASK-009 通过现有窗口工厂替换为正式 `MainWindow`。
+- 干净构建、TASK-008 独立测试、全部 12 项 CTest、Qt MQTT 6.11.1 包探测和真实 Windows 登录窗口启动均通过。
+
+## TASK-008 登录 UI 优化（2026-08-15）
+
+- 用户确认采用 Qt 自绘工业蓝标题栏，以及“图标 + 左对齐标签 + 输入框”的两行表单布局。
+- PNG 资源目录固定为 `src/ui/resources/images/login`，运行时路径固定为 `:/images/login/...`。
+- `login_logo.png`、`login_user.png`、`login_pwd.png` 均为 512×512、32 位 ARGB PNG，满足 32px/22px 显示及 200% DPI 源图尺寸要求。
+- UI 优化不得改变 `LoginWindow` 公开接口、认证协议、`AppController`、会话、设置规则或 TASK-009 边界。
+- Qt AUTORCC 已将三张 PNG 嵌入 `plate_client_ui`，`Q_INIT_RESOURCE(plate_client)` 保证静态库消费者和独立测试均能解析固定资源路径。
+- Windows 150% 缩放下窗口物理尺寸为 780×630，对应 520×420 逻辑尺寸；最终截图无重叠、截断或不可达控件。

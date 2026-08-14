@@ -347,11 +347,11 @@ TASK-007 已验收。
 
 **实现内容**
 
-- 实现包含“车牌识别系统”、用户名、密码和登录按钮的登录窗口。
+- 实现固定 `520×420`、带工业蓝自绘标题栏的登录窗口，包含居中 Logo 标题、左对齐图标表单和靠下的登录按钮。
 - 密码使用掩码，回车提交，提交期间禁用重复提交。
 - 仅通过 `QSettings` 记住上次用户名。
 - 实现 `Application`/`AppController` 的启动配置检查、登录成功和登录失败流程。
-- 登录成功后立即创建主窗口，不等待 MQTT。
+- 登录成功后通过可替换窗口工厂立即创建认证后窗口，不等待 MQTT；TASK-008 默认实现仅为最小空白承接窗口，TASK-009 再替换为正式 `MainWindow`。
 
 **预计修改文件**
 
@@ -361,23 +361,31 @@ TASK-007 已验收。
 - `src/app/AppController.cpp`
 - `src/ui/windows/LoginWindow.h`
 - `src/ui/windows/LoginWindow.cpp`
+- `src/ui/resources/plate_client.qrc`
+- `src/ui/resources/images/login/login_logo.png`
+- `src/ui/resources/images/login/login_user.png`
+- `src/ui/resources/images/login/login_pwd.png`
 - `src/app/main.cpp`
 - `tests/ui/tst_login_window.cpp`
 - `tests/app/tst_app_controller_login.cpp`
+- `tests/app/tst_application_startup.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
 **独立测试**
 
 - 使用假认证响应测试回车提交、重复提交保护、错误展示和登录成功信号。
+- 验证资源加载、标题栏控制、表单对齐、按钮稳定，以及 100%/150%/200% DPI 下无重叠或截断。
 - 重启测试设置环境，确认只保存用户名，不保存密码或凭据。
 - 测试非法引导配置阻断登录流程。
 
 **验收标准**
 
 - 登录页控件顺序、标题和密码行为符合 FR-010 至 FR-012。
+- 自绘标题栏可拖动、最小化和关闭，三张 PNG 从 Qt 资源路径加载，布局在目标 DPI 下保持稳定。
 - 登录过程不阻塞 UI，失败后可重新提交。
 - 登录成功不依赖 MQTT 连接结果。
+- 默认承接窗口不包含 TASK-009 的导航、连接状态或页面外壳。
 
 ### TASK-009 实现主窗口、导航和页面外壳
 

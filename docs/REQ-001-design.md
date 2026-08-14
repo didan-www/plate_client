@@ -67,9 +67,13 @@ flowchart TB
 
 | 模块 | 职责 |
 | --- | --- |
-| `Application` | 初始化 Qt、组织名、应用名、日志、配置和全局对象 |
-| `AppController` | 创建登录页和主窗口；控制登录、退出、关闭及页面生命周期 |
+| `Application` | 校验启动配置，并在校验通过后按所有权顺序创建日志、HTTP、认证、会话、设置和控制器对象 |
+| `AppController` | 创建登录页；协调异步登录、用户名设置和认证后窗口生命周期 |
 | `BootstrapConfigLoader` | 加载并校验 `client.json`，拒绝非法 URL、UUID 和传输配置 |
+
+程序入口负责设置 Qt 组织名、应用名和版本，再调用 `Application`。非法配置通过阻断式错误提示终止启动，且在校验通过前不创建日志、HTTP、认证、会话或 `QSettings` 对象。
+
+TASK-008 的认证后窗口由 `AppController::WindowFactory` 注入；默认工厂仅创建不含导航、状态或页面的最小承接窗口。TASK-009 将默认工厂替换为正式 `MainWindow`，登录控制流程和窗口工厂契约保持不变。
 
 ### 5.2 会话和连接
 
@@ -106,7 +110,7 @@ flowchart TB
 
 | 界面 | 职责 |
 | --- | --- |
-| `LoginWindow` | 用户名、密码、登录状态和错误提示 |
+| `LoginWindow` | 用户名、掩码密码、提交状态和安全错误提示；只发出登录交互信号，不拼装协议 |
 | `MainWindow` | 最大化窗口、左侧导航、页面容器和关闭事件 |
 | `NavigationSidebar` | 导航、用户、HTTP/MQTT 状态、版本和退出 |
 | `RealtimePage` | 当前图片、当前状态、结果信息和实时表格 |
@@ -114,6 +118,10 @@ flowchart TB
 | `AccessListPage` | 黑白名单标签、搜索、分页、新增和删除 |
 | `RecognitionTableModel` | 实时或历史只读表格模型 |
 | `AccessListTableModel` | 名单只读表格模型 |
+
+`LoginWindow` 固定为 `520×420` 逻辑尺寸，使用 `44px`、`#1F5F99` 的 Qt 自绘标题栏并提供拖动、最小化和关闭，不提供最大化或缩放。主体使用浅灰背景；Logo 标题组合居中，用户名和密码行按图标、左对齐标签、输入框三列对齐，登录按钮固定为 `220×48` 并靠近底部。错误提示预留稳定区域，不得引起按钮位移。
+
+登录图片统一位于 `src/ui/resources/images/login`，由 `src/ui/resources/plate_client.qrc` 以 `:/images/login/...` 路径编译进 `plate_client_ui`。UI 库显式初始化资源，应用和独立 UI 测试均不得依赖当前工作目录。
 
 视频识别和摄像头识别使用禁用的导航项，不创建空白业务页面。
 
@@ -351,22 +359,23 @@ stateDiagram-v2
 sequenceDiagram
     participant U as "用户"
     participant L as "LoginWindow"
+    participant C as "AppController"
     participant A as "AuthApiClient"
     participant S as "SessionService"
-    participant H as "HeartbeatService"
-    participant M as "MqttSubscriber"
+    participant W as "认证后窗口工厂"
 
     U->>L: "输入账号密码"
-    L->>A: "异步登录"
+    L->>C: "提交用户名和密码"
+    C->>A: "异步登录"
     A-->>S: "令牌与MQTT配置"
     S->>S: "建立新sessionGeneration"
-    S-->>L: "登录成功"
-    L->>H: "启动心跳"
-    L->>M: "后台连接并订阅"
-    L-->>U: "显示最大化主界面"
+    A-->>C: "返回不含凭据的SessionSummary"
+    C->>C: "记住用户名并清空密码"
+    C->>W: "按显示名立即创建窗口"
+    C-->>U: "隐藏登录页并显示认证后窗口"
 ```
 
-主界面展示不依赖 MQTT 连接完成。MQTT 初始状态为重连中。
+认证后窗口展示不依赖 MQTT 连接完成。TASK-008 使用最小承接窗口；TASK-009 替换为最大化 `MainWindow`，TASK-010 和 TASK-011 再分别接入心跳和 MQTT 状态。
 
 ## 11. 实时事件和图片时序
 
@@ -526,6 +535,9 @@ sequenceDiagram
 ### 20.1 单元测试
 
 - 引导配置校验。
+- 登录窗口控件顺序、密码掩码、回车提交和重复提交保护。
+- 登录资源加载、自绘标题栏窗口控制、表单对齐、错误提示布局稳定和 100%/150%/200% DPI 适配。
+- 登录失败恢复、成功窗口创建、用户名独占持久化、在途登录取消和非法配置启动阻断。
 - 登录和统一 JSON 信封解析。
 - HTTP DTO 类型、必填字段、状态相关可空性、分页边界和 2 MiB 上限。
 - MQTT 事件字段、状态和 revision 去重。

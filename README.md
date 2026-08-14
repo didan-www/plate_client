@@ -4,7 +4,7 @@
 
 系统由嵌入式端、Linux 服务端和 Qt 管理端组成。车辆图片的保存、模型识别、MySQL 日志以及向嵌入式端发布放行结果均由 Linux 服务端负责；Qt 客户端不执行识别，只负责实时监控、历史查询和业务配置管理。
 
-> 当前状态：TASK-007 已完成，当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输和内存认证会话服务；登录界面及后续业务功能尚未实现。
+> 当前状态：TASK-008 已完成，当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输、内存认证会话服务、工业蓝自绘标题栏登录界面和应用入口流程；TASK-009 的正式主窗口、导航和页面外壳尚未实现。
 
 ## 系统职责
 
@@ -101,6 +101,7 @@ plate_client/
 │   ├── REQ-001.md
 │   └── REQ-001-design.md
 ├── src/                           # 最小 Qt Widgets 应用
+│   └── ui/resources/              # 编译进程序的登录 UI PNG 和 qrc
 ├── tests/                         # Qt Test 冒烟测试
 └── .deps/                         # 本地依赖，不提交
 ```
@@ -122,9 +123,12 @@ plate_client/
 ## 本地数据边界
 
 - 只通过 `QSettings` 记住上次用户名。
+- 登录失败或成功后清空密码输入框；密码、访问令牌和 MQTT 凭据不写入 `QSettings`。
 - 实时记录、查询结果、名单页面数据和当前图片只保存在内存。
 - 技术日志按日期写入 `QStandardPaths::AppLocalDataLocation/logs`，保留 7 天并脱敏。
 - 不创建 SQLite 数据库，不加载 MySQL 驱动，不启用图片磁盘缓存。
+
+登录 UI 图片位于 `src/ui/resources/images/login`，通过 Qt Resource System 编译进程序；运行时不从磁盘加载这些界面资源。
 
 ## 文档
 
@@ -144,4 +148,4 @@ D:\Qt\Tools\CMake_64\bin\cmake.exe --build --preset mingw-debug
 D:\Qt\Tools\CMake_64\bin\ctest.exe --preset mingw-debug
 ```
 
-`mingw-debug` Preset 生成 Debug 构建到 `build/mingw-debug`。测试 Preset 会设置 Qt 和项目本地 Qt MQTT 的运行时路径，并使用 Qt offscreen 平台运行 `unit.smoke` 与 `app.startup`；实际窗口启动也已在 Windows 桌面环境验证。
+`mingw-debug` Preset 生成 Debug 构建到 `build/mingw-debug`。构建时会把示例配置复制为构建目录中受忽略的 `src/config/client.json`，仅用于当前开发构建和 `app.startup`，不会提交真实配置。测试 Preset 会设置 Qt 和项目本地 Qt MQTT 的运行时路径，并使用 Qt offscreen 平台运行全部测试；登录窗口也已在 Windows 桌面环境验证可显示和正常关闭。

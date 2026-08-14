@@ -2,6 +2,7 @@
 
 #include "domain/Errors.h"
 
+#include <QMetaType>
 #include <QString>
 
 #include <optional>
