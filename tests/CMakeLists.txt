@@ -50,6 +50,16 @@ add_executable(
 )
 
 add_executable(
+    tst_main_window_shell
+    ui/tst_main_window_shell.cpp
+)
+
+add_executable(
+    plate_client_main_window_preview EXCLUDE_FROM_ALL
+    ui/main_window_preview.cpp
+)
+
+add_executable(
     tst_app_controller_login
     app/tst_app_controller_login.cpp
     support/MockHttpServer.h
@@ -70,6 +80,8 @@ plate_client_apply_project_options(tst_http_client)
 plate_client_apply_project_options(tst_auth_api_client)
 plate_client_apply_project_options(tst_session_service)
 plate_client_apply_project_options(tst_login_window)
+plate_client_apply_project_options(tst_main_window_shell)
+plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
 
@@ -148,6 +160,20 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_link_libraries(
+    tst_main_window_shell
+    PRIVATE
+        plate_client_ui
+        Qt6::Test
+)
+
+target_link_libraries(
+    plate_client_main_window_preview
+    PRIVATE
+        plate_client_ui
+        Qt6::Widgets
+)
+
 target_include_directories(tst_app_controller_login PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(
@@ -177,6 +203,10 @@ add_test(NAME unit.login_window COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi100 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi150 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi200 COMMAND tst_login_window)
+add_test(NAME unit.main_window_shell COMMAND tst_main_window_shell)
+add_test(NAME unit.main_window_shell.dpi100 COMMAND tst_main_window_shell)
+add_test(NAME unit.main_window_shell.dpi150 COMMAND tst_main_window_shell)
+add_test(NAME unit.main_window_shell.dpi200 COMMAND tst_main_window_shell)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
@@ -194,6 +224,10 @@ set_tests_properties(
     unit.login_window.dpi100
     unit.login_window.dpi150
     unit.login_window.dpi200
+    unit.main_window_shell
+    unit.main_window_shell.dpi100
+    unit.main_window_shell.dpi150
+    unit.main_window_shell.dpi200
     unit.app_controller_login
     unit.application_startup
     app.startup
@@ -203,15 +237,18 @@ set_tests_properties(
 
 set_tests_properties(
     unit.login_window.dpi100
+    unit.main_window_shell.dpi100
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1"
 )
 
 set_tests_properties(
     unit.login_window.dpi150
+    unit.main_window_shell.dpi150
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1.5"
 )
 
 set_tests_properties(
     unit.login_window.dpi200
+    unit.main_window_shell.dpi200
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=2"
 )

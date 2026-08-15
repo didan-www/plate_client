@@ -6,6 +6,7 @@
 #include "infrastructure/logging/TechnicalLogger.h"
 #include "services/SessionService.h"
 #include "domain/RequestContext.h"
+#include "ui/windows/MainWindow.h"
 
 #include <QMessageBox>
 #include <QSettings>
@@ -19,20 +20,16 @@ void showStartupError(const QString &message)
     QMessageBox::critical(nullptr, QStringLiteral("启动失败"), message);
 }
 
-QWidget *createPlaceholderWindow(const QString &)
+QWidget *createMainWindow(const QString &displayName)
 {
-    auto *window = new QWidget;
-    window->setWindowTitle(QStringLiteral("车牌识别系统"));
-    window->setMinimumSize(800, 560);
-    window->resize(1024, 720);
-    return window;
+    return new MainWindow(displayName);
 }
 } // namespace
 
 Application::Application(StartupErrorPresenter errorPresenter,
                          AppController::WindowFactory windowFactory)
     : errorPresenter_(errorPresenter ? std::move(errorPresenter) : showStartupError)
-    , windowFactory_(windowFactory ? std::move(windowFactory) : createPlaceholderWindow)
+    , windowFactory_(windowFactory ? std::move(windowFactory) : createMainWindow)
 {
 }
 

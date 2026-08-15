@@ -111,7 +111,7 @@ TASK-008 的认证后窗口由 `AppController::WindowFactory` 注入；默认工
 | 界面 | 职责 |
 | --- | --- |
 | `LoginWindow` | 用户名、掩码密码、提交状态和安全错误提示；只发出登录交互信号，不拼装协议 |
-| `MainWindow` | 最大化窗口、左侧导航、页面容器和关闭事件 |
+| `MainWindow` | 渐变自绘标题栏、最大化窗口、左侧导航、页面容器和关闭事件 |
 | `NavigationSidebar` | 导航、用户、HTTP/MQTT 状态、版本和退出 |
 | `RealtimePage` | 当前图片、当前状态、结果信息和实时表格 |
 | `HistoryPage` | 时间/设备筛选、分页表格和 CSV 下载 |
@@ -122,6 +122,8 @@ TASK-008 的认证后窗口由 `AppController::WindowFactory` 注入；默认工
 `LoginWindow` 固定为 `520×420` 逻辑尺寸，使用 `44px`、`#1F5F99` 的 Qt 自绘标题栏并提供拖动、最小化和关闭，不提供最大化或缩放。主体使用浅灰背景；Logo 标题组合居中，用户名和密码行按图标、左对齐标签、输入框三列对齐，登录按钮固定为 `220×48` 并靠近底部。错误提示预留稳定区域，不得引起按钮位移。
 
 登录图片统一位于 `src/ui/resources/images/login`，由 `src/ui/resources/plate_client.qrc` 以 `:/images/login/...` 路径编译进 `plate_client_ui`。UI 库显式初始化资源，应用和独立 UI 测试均不得依赖当前工作目录。
+
+`MainWindow` 使用 `44px` Qt 自绘标题栏替代 Windows 原生标题栏，背景从左侧 `#2A5B78` 到右侧 `#3C7898` 横向渐变，标题文字固定为 `#FFFFFF`。标题栏提供最小化、最大化/还原和关闭按钮，支持拖动及双击最大化/还原；无边框窗口在普通状态下通过 Windows 非客户区命中测试保留 DPI 感知的边缘缩放，最大化时禁用缩放命中。该实现只负责窗口交互，不改变关闭清理流程的 TASK-020 边界。
 
 视频识别和摄像头识别使用禁用的导航项，不创建空白业务页面。
 

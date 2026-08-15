@@ -57,8 +57,14 @@ add_library(
 
 add_library(
     plate_client_ui STATIC
+    ui/widgets/ConnectionStatusIndicator.h
+    ui/widgets/ConnectionStatusIndicator.cpp
+    ui/widgets/NavigationSidebar.h
+    ui/widgets/NavigationSidebar.cpp
     ui/windows/LoginWindow.h
     ui/windows/LoginWindow.cpp
+    ui/windows/MainWindow.h
+    ui/windows/MainWindow.cpp
     ui/resources/plate_client.qrc
 )
 

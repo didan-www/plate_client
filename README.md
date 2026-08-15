@@ -4,7 +4,7 @@
 
 系统由嵌入式端、Linux 服务端和 Qt 管理端组成。车辆图片的保存、模型识别、MySQL 日志以及向嵌入式端发布放行结果均由 Linux 服务端负责；Qt 客户端不执行识别，只负责实时监控、历史查询和业务配置管理。
 
-> 当前状态：TASK-008 已完成，当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输、内存认证会话服务、工业蓝自绘标题栏登录界面和应用入口流程；TASK-009 的正式主窗口、导航和页面外壳尚未实现。
+> 当前状态：TASK-009 已完成，当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输、内存认证会话服务、工业蓝自绘标题栏登录界面、应用入口流程，以及正式主窗口、左侧导航、独立连接状态显示和页面外壳；TASK-010 的心跳和 HTTP 状态逻辑尚未实现。
 
 ## 系统职责
 
@@ -137,6 +137,16 @@ plate_client/
 - [AI 开发约束](AGENTS.md)：后续 AI 代理必须遵守的工程规范。
 
 任何影响业务范围、公开接口、MQTT 消息、页面行为或验收标准的变更，应先更新需求文档，再同步架构设计和代码。
+
+## 主窗口 UI 预览
+
+没有可用 Linux 登录服务时，可运行测试专用预览程序直接检查正式 `MainWindow` 的界面效果：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-main-window-preview.ps1
+```
+
+脚本会显式构建并启动 `plate_client_main_window_preview`。该目标位于测试目录且标记为 `EXCLUDE_FROM_ALL`，不参与默认构建、CTest、安装或发布；它只链接 UI 和 Qt Widgets，不读取正式配置、不创建登录会话，也不访问网络。Qt、MinGW、CMake 和 Ninja 路径可分别通过 `-QtPrefix`、`-MingwRoot`、`-CMakePath` 和 `-NinjaPath` 覆盖。
 
 ## 构建状态
 

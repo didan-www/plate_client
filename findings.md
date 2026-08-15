@@ -180,3 +180,55 @@
 - UI 优化不得改变 `LoginWindow` 公开接口、认证协议、`AppController`、会话、设置规则或 TASK-009 边界。
 - Qt AUTORCC 已将三张 PNG 嵌入 `plate_client_ui`，`Q_INIT_RESOURCE(plate_client)` 保证静态库消费者和独立测试均能解析固定资源路径。
 - Windows 150% 缩放下窗口物理尺寸为 780×630，对应 520×420 逻辑尺寸；最终截图无重叠、截断或不可达控件。
+
+## TASK-009 实施发现（2026-08-15）
+
+- 前置提交为 `211bcbd`；工作区只有用户本机 `.qtcreator/` 未跟踪目录，无已跟踪文件差异。
+- `AppController::WindowFactory` 已以显示名创建认证后 `QWidget`，登录成功后统一设置 `WA_DeleteOnClose` 并调用 `show()`；TASK-009 无需改变认证或会话契约。
+- `Application` 的默认工厂仍为 TASK-008 最小承接窗口，TASK-009 应局部替换为正式 `MainWindow`，并由 `MainWindow` 的首次显示路径落实最大化要求。
+- 当前 `plate_client_ui` 只包含 `LoginWindow` 与资源；新增 `MainWindow`、`NavigationSidebar`、`ConnectionStatusIndicator` 可继续留在该 UI 静态库中，仅依赖 Qt Widgets。
+- TASK-009 页面容器只需三个可用页面外壳：实时监控、日志记录、黑白名单管理；视频识别和摄像头识别只保留禁用导航项，不创建页面。
+- 两个连接状态在本任务中仅提供独立的展示控件和初始状态；不得接入 TASK-010 心跳或 TASK-011 MQTT 状态机。
+- 项目版本 `0.1.1` 和构建日期通过 `PLATE_CLIENT_VERSION`、`PLATE_CLIENT_BUILD_DATE` 编译定义注入；侧栏可直接只读显示，不需要新增配置或领域数据。
+- 现有 UI 测试按对象名和真实布局关系验收，并为登录窗口注册 100%/150%/200% DPI 变体；TASK-009 可沿用同一 CTest 模式覆盖三档 DPI 和代表性逻辑尺寸。
+- `AppController` 的注入工厂测试应保持不变；默认生产工厂替换为 `MainWindow` 不应影响测试自定义窗口或登录成功“不等待 MQTT”的既有断言。
+- TASK-009 独立测试已覆盖五项导航顺序、两个禁用项无页面、三个页面索引、两个状态互不覆盖、用户/版本/构建日期、退出交互信号、首次显示最大化，以及三档 DPI 下三种目标尺寸的布局边界。
+- 退出按钮在本任务只由 `NavigationSidebar` 转发为 `MainWindow::logoutRequested`，不连接会话清理；注销与销毁顺序仍严格留给 TASK-020。
+- 干净全量构建为 91/91，CTest 为 19/19；Qt MQTT 6.11.1 幂等探测与最小消费者编译链接通过，确认 TASK-009 没有破坏既有构建和运行时依赖。
+
+## TASK-009 UI 预览工具约束（2026-08-15）
+
+- 预览工具是人工检查现有 `MainWindow` 的测试构建产物，不是正式产品功能，也不是跳过登录的生产参数。
+- 使用 `EXCLUDE_FROM_ALL` 可让目标参与 CMake 生成但不进入默认全量构建；只有显式指定目标或启动脚本时才生成。
+- 预览入口使用独立应用名 `plate_client_ui_preview`，不创建 `Application`、`AppController`、配置、设置、日志、认证、会话或网络对象。
+- 运行脚本必须支持覆盖 Qt、MinGW、CMake 和 Ninja 路径，并在退出后恢复调用进程的 PATH。
+- 实现使用 `tests/ui/main_window_preview.cpp` 作为唯一预览入口，CMake 目标只链接 `plate_client_ui` 与 `Qt6::Widgets`。
+- `scripts/run-main-window-preview.ps1` 使用明确的 CMake 缓存参数支持工具链路径覆盖，并在 `finally` 中恢复原 PATH。
+- 经干净构建验证，默认 91 个构建步骤不包含预览目标且不生成预览 EXE；只有脚本显式指定目标时才执行额外 4 个构建步骤。
+- 预览脚本 `-SmokeTest` 已在 Windows 上实际成功运行，说明 Qt/MinGW 运行时路径和独立事件循环有效。
+- Ninja 最终链接命令证实预览只依赖 `plate_client_ui`、Qt6 Widgets/Gui/Core；业务库和 Qt MQTT 均未进入预览进程。
+- CTest 列表保持 19 项且全量通过，预览目标既不改变正式测试集合，也不改变正式应用登录流程。
+- 脚本全部路径覆盖参数与 PATH 恢复已实际验证；交互预览窗口已启动并保持运行供人工检查。
+
+## TASK-009 深蓝侧栏渲染修复（2026-08-15）
+
+- 截图中侧栏区域显示了 `MainWindow` 的 `#F4F6F8` 浅灰背景，但侧栏子控件仍应用白色/浅色 QSS，说明样式表已向子控件传播，而自定义 `NavigationSidebar` 本身没有绘制其 QSS 背景。
+- `NavigationSidebar` 是直接继承 `QWidget` 的自定义控件；现有实现没有启用 `Qt::WA_StyledBackground`，也没有样式感知的 `paintEvent()`，因此 Windows/Qt 当前渲染路径下根选择器的 `#173B57` 背景保持透明。
+- 最小修复是启用 `Qt::WA_StyledBackground`，继续复用既有深蓝侧栏及其文字、按钮、状态配色，不改变 TASK-009 页面行为或 TASK-010+ 边界。
+- 既有测试只验证控件结构、状态、几何和 DPI，没有检查实际绘制像素；新增离屏渲染像素断言覆盖该缺口。
+
+## TASK-009 渐变自绘标题栏（2026-08-15）
+
+- 当前 `MainWindow` 使用 Windows 原生标题栏，Qt QWidget QSS 无法绘制原生非客户区；Windows DWM 标题栏颜色接口也不支持横向渐变。
+- 精确实现 `#16304A -> #204268` 必须使用 `Qt::FramelessWindowHint` 和 Qt 自绘标题栏，同时补齐原生标题栏原有的移动、双击最大化/还原、窗口控制及普通状态边缘缩放。
+- 为保持改动局部，不复用或重构固定尺寸且不可最大化的 `LoginTitleBar`；主窗口标题栏作为 `MainWindow.cpp` 内部实现，避免新增跨窗口抽象。
+- 渐变背景与深蓝侧栏是展示层契约，不改变登录、会话、协议、页面索引或 TASK-010+ 业务边界。
+- Windows `WM_NCHITTEST` 必须在同一坐标系内比较。最终实现使用 `ScreenToClient()` 与 `GetClientRect()` 取得客户区原生坐标，再按原生客户区宽度与 Qt 逻辑宽度计算缩放，避免 DPI 虚拟化使右侧按钮误判为非客户区。
+- 最终标题栏整体显式返回 `HTCLIENT=1`，由 Qt 处理按钮、双击和超过系统阈值后的拖动；Windows 原生命中只负责普通状态边缘缩放，右边缘/右下角分别为 `HTRIGHT=11`/`HTBOTTOMRIGHT=17`。
+
+## TASK-009 标题栏渐变色微调（2026-08-15）
+
+- 用户确认将标题栏调整为 `#2A5B78 -> #3C7898`，与侧栏 `#173B57` 保持同一工业蓝灰色系，同时通过更高明度建立标题栏与侧栏的层级。
+- 本次只需替换现有 QSS 的两个渐变停止色；标题文字、窗口按钮、悬停效果、拖动、双击和边缘缩放逻辑均无需改变。
+- 既有真实渲染测试已经检查标题栏左右端点，更新期望色即可为本次调整提供回归保护。
+- Windows 最大化预览的标题栏左/中/右实际像素为 `#2A5B78`、`#336988`、`#3C7898`；中间色符合线性插值，且与侧栏 `#173B57` 保持清晰层级。
