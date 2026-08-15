@@ -213,3 +213,8 @@ ConnectionStatusIndicator *NavigationSidebar::mqttStatusIndicator() const noexce
 {
     return mqttStatusIndicator_;
 }
+
+void NavigationSidebar::setHttpConnectivityState(HttpConnectivityState state)
+{
+    httpStatusIndicator_->setHttpConnectivityState(state);
+}

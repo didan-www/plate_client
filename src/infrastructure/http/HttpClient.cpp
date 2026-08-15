@@ -31,6 +31,7 @@ public:
     QTimer timer;
     QByteArray body;
     bool completed = false;
+    bool responseObserved = false;
 };
 
 std::optional<int> responseStatus(const RequestState *state)
@@ -57,6 +58,19 @@ HttpResponse responseFrom(const RequestState *state)
         statusCode = state->reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     }
     return HttpResponse(statusCode, std::move(headers), state->body, state->request.context());
+}
+
+void observeResponse(RequestState *state, HttpClient *client)
+{
+    if (state->responseObserved || !state->reply) {
+        return;
+    }
+    const auto status = responseStatus(state);
+    if (!status.has_value()) {
+        return;
+    }
+    state->responseObserved = true;
+    emit client->responseReceived(*status, state->request.context().sessionGeneration());
 }
 
 void finishFailure(RequestState *state, HttpRequestHandle *handle, HttpError error)
@@ -101,6 +115,21 @@ qint64 maximumBufferedBytes(const RequestState *state)
         return HttpRequestPolicy::jsonMaximumBytes;
     }
     return HttpRequestPolicy::maximumBufferedBytes(state->request.responseMode());
+}
+
+bool isHttpStatusError(QNetworkReply::NetworkError error)
+{
+    const int code = static_cast<int>(error);
+    return (code >= 200 && code <= 299) || (code >= 400 && code <= 499);
+}
+
+bool hasCompleteResponseBody(const RequestState *state)
+{
+    const auto length = contentLength(state->reply);
+    if (!length.has_value()) {
+        return true;
+    }
+    return state->body.size() == *length;
 }
 
 QString networkMessage()
@@ -187,9 +216,12 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
     });
     connect(state->reply, &QNetworkReply::finished, state->reply, &QObject::deleteLater);
 
-    const auto failTooLarge = [state, handle] {
+    const auto failTooLarge = [state, handle, this] {
         if (state->completed) {
             return;
+        }
+        if (isCurrent(state)) {
+            observeResponse(state, this);
         }
         QPointer<QNetworkReply> reply = state->reply;
         finishFailure(state,
@@ -309,7 +341,7 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
     };
 
     connect(state->reply, &QNetworkReply::finished, handle,
-            [state, handle, consumeAvailable] {
+            [state, handle, consumeAvailable, this] {
                 if (state->completed) {
                     if (state->reply) {
                         state->reply->deleteLater();
@@ -336,6 +368,15 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
                 } else {
                     const HttpResponse response = responseFrom(state);
                     const int status = response.statusCode();
+                    const bool hasHttpResponse = responseStatus(state).has_value();
+                    const bool transportCompleted =
+                        state->reply->error() == QNetworkReply::NoError
+                        || ((status >= 400 && status <= 599)
+                            && isHttpStatusError(state->reply->error())
+                            && hasCompleteResponseBody(state));
+                    if (hasHttpResponse && transportCompleted) {
+                        observeResponse(state, this);
+                    }
                     const bool redirected =
                         state->reply->attribute(QNetworkRequest::RedirectionTargetAttribute)
                             .isValid()

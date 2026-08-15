@@ -1,5 +1,7 @@
 #pragma once
 
+#include "services/HttpConnectivityState.h"
+
 #include <QWidget>
 
 class QLabel;
@@ -20,6 +22,7 @@ public:
     explicit ConnectionStatusIndicator(const QString &title, QWidget *parent = nullptr);
 
     void setStatus(VisualState state, const QString &text);
+    void setHttpConnectivityState(HttpConnectivityState state);
     [[nodiscard]] VisualState state() const noexcept;
     [[nodiscard]] QString statusText() const;
 

@@ -16,6 +16,8 @@ class JsonCodecs final
 public:
     [[nodiscard]] static ProtocolResult<QByteArray> encodeLoginRequest(
         const QString &username, const QString &password, const QUuid &clientId);
+    [[nodiscard]] static ProtocolResult<QByteArray> encodeHeartbeatRequest(
+        const QUuid &clientId, const QString &appVersion);
     [[nodiscard]] static ProtocolResult<QByteArray> encodeAccessListCreateRequest(
         AccessListType listType, const QString &plateNumber, const QString &remark);
 

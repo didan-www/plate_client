@@ -57,6 +57,21 @@ void ConnectionStatusIndicator::setStatus(VisualState state, const QString &text
     setAccessibleDescription(text);
 }
 
+void ConnectionStatusIndicator::setHttpConnectivityState(HttpConnectivityState state)
+{
+    switch (state) {
+    case HttpConnectivityState::Detecting:
+        setStatus(VisualState::Busy, QStringLiteral("检测中"));
+        break;
+    case HttpConnectivityState::Online:
+        setStatus(VisualState::Online, QStringLiteral("在线"));
+        break;
+    case HttpConnectivityState::Abnormal:
+        setStatus(VisualState::Error, QStringLiteral("异常"));
+        break;
+    }
+}
+
 ConnectionStatusIndicator::VisualState ConnectionStatusIndicator::state() const noexcept
 {
     return state_;

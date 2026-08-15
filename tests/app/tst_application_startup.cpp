@@ -1,11 +1,17 @@
 #include "app/Application.h"
 
 #include "app/AppController.h"
+#include "support/MockHttpServer.h"
+#include "ui/widgets/ConnectionStatusIndicator.h"
+#include "ui/widgets/NavigationSidebar.h"
 #include "ui/windows/LoginWindow.h"
+#include "ui/windows/MainWindow.h"
 
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLineEdit>
+#include <QPushButton>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -19,6 +25,48 @@ QString writeConfig(const QString &directory, const QByteArray &bytes)
     }
     return filePath;
 }
+
+QByteArray envelope(const QJsonValue &data)
+{
+    return QJsonDocument(QJsonObject {
+                             {QStringLiteral("success"), true},
+                             {QStringLiteral("code"), QStringLiteral("OK")},
+                             {QStringLiteral("message"), QString()},
+                             {QStringLiteral("requestId"), QStringLiteral("startup-request")},
+                             {QStringLiteral("data"), data},
+                         })
+        .toJson(QJsonDocument::Compact);
+}
+
+MockHttpResponse jsonResponse(QByteArray body)
+{
+    MockHttpResponse response;
+    response.headers.append({QByteArrayLiteral("Content-Type"),
+                             QByteArrayLiteral("application/json")});
+    response.chunks.append(std::move(body));
+    return response;
+}
+
+QJsonObject sessionData()
+{
+    const QString expiry = QDateTime::currentDateTime()
+                               .addSecs(3600)
+                               .toOffsetFromUtc(8 * 3600)
+                               .toString(Qt::ISODate);
+    return QJsonObject {
+        {QStringLiteral("displayName"), QStringLiteral("测试操作员")},
+        {QStringLiteral("accessToken"), QStringLiteral("access-secret")},
+        {QStringLiteral("expiresAt"), expiry},
+        {QStringLiteral("mqtt"),
+         QJsonObject {{QStringLiteral("host"), QStringLiteral("broker.test")},
+                      {QStringLiteral("port"), 8883},
+                      {QStringLiteral("tls"), true},
+                      {QStringLiteral("username"), QStringLiteral("mqtt-user")},
+                      {QStringLiteral("password"), QStringLiteral("mqtt-secret")},
+                      {QStringLiteral("expiresAt"), expiry},
+                      {QStringLiteral("eventTopic"), QStringLiteral("plate/events")}}},
+    };
+}
 } // namespace
 
 class ApplicationStartupTest final : public QObject
@@ -28,6 +76,7 @@ class ApplicationStartupTest final : public QObject
 private slots:
     void invalidConfigBlocksBeforeRuntimeInitialization();
     void validConfigCreatesLoginFlow();
+    void successfulLoginStartsHeartbeatAndUpdatesMainWindow();
 };
 
 void ApplicationStartupTest::invalidConfigBlocksBeforeRuntimeInitialization()
@@ -72,6 +121,41 @@ void ApplicationStartupTest::validConfigCreatesLoginFlow()
     QVERIFY(runtime.controller()->loginWindow() != nullptr);
     QVERIFY(runtime.controller()->loginWindow()->isVisible());
     QVERIFY(presentedError.isEmpty());
+}
+
+void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    server.enqueueResponse(jsonResponse(envelope(sessionData())));
+    server.enqueueResponse(jsonResponse(envelope(QJsonValue::Null)));
+    const QByteArray bytes = QJsonDocument(QJsonObject {
+                                               {QStringLiteral("clientId"),
+                                                QStringLiteral("12345678-1234-4abc-8def-1234567890ab")},
+                                               {QStringLiteral("loginBaseUrl"),
+                                                server.url().toString()},
+                                               {QStringLiteral("allowInsecureTransport"), true},
+                                           })
+                                  .toJson(QJsonDocument::Compact);
+    Application runtime([](const QString &) { qFatal("Unexpected startup error."); });
+    QVERIFY(runtime.startFromConfigFile(writeConfig(directory.path(), bytes)));
+
+    LoginWindow *login = runtime.controller()->loginWindow();
+    login->findChild<QLineEdit *>(QStringLiteral("usernameEdit"))->setText(
+        QStringLiteral("operator"));
+    login->findChild<QLineEdit *>(QStringLiteral("passwordEdit"))->setText(
+        QStringLiteral("secret"));
+    login->findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+
+    QTRY_COMPARE(server.requests().size(), 2);
+    auto *window = qobject_cast<MainWindow *>(runtime.controller()->authenticatedWindow());
+    QVERIFY(window);
+    QCOMPARE(server.requests().at(1).target,
+             QByteArrayLiteral("/api/v1/clients/heartbeat"));
+    QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
+                 QStringLiteral("在线"));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

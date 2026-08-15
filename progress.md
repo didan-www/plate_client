@@ -636,6 +636,41 @@
 | TASK-009 独立测试 | `unit.main_window_shell` 及 100%/150%/200% DPI，4/4 | 通过 |
 | 布局边界 | 每档 DPI 覆盖 1366x768、1920x1080、3840x2160 | 通过 |
 | CTest 全量回归 | 19/19，0 失败 | 通过 |
+
+## 会话：2026-08-15（TASK-010 实现与验收）
+
+### Phase 32：心跳、HTTP 状态和应用接入完成
+
+- **Status:** complete
+- 新增 `HeartbeatApiClient`、`HeartbeatService` 和 `HttpConnectivityState`，登录激活后立即发送首次心跳，随后每 30 秒发送，单次沿用固定 5 秒总时限且不并发。
+- 新增 `HttpClient::responseReceived` 可达性事件；完整合法 HTTP 响应清零连续失败并恢复“在线”，网络/TLS/超时连续 3 次后进入“异常”，取消、旧响应、协议错误和超限不计数。
+- 心跳请求严格发送 `clientId`、`appVersion` 和 Bearer Token；成功及失败信封均严格解析，401 交给当前会话代次统一失效。
+- 默认应用装配将心跳三态接入 `MainWindow` 左侧 HTTP 指示器；异常状态不会禁用实时、历史或名单页面入口。未实现 MQTT 或 TASK-020 完整退出编排。
+- 首次构建命令因 CMake 不在 PATH 返回退出码 1；改用已验证的 `D:\Qt\Tools\CMake_64\bin\cmake.exe` 绝对路径后成功。
+- 新增业务错误测试首次使用 `qvariant_cast<HeartbeatError>` 编译失败，因为值类型无默认构造函数；改用 `QSignalSpy` 元类型数据指针读取后构建通过，生产代码未受影响。
+- TASK-010 专项测试 `json_codecs`、`http_client`、`heartbeat_service`、`http_status_indicator`、`application_startup` 5/5 通过。
+- 从 `clean` 和 `--fresh` 开始的 Debug 全量构建 106/106 步成功；CTest 全量回归 21/21 通过（原有 19 项和新增 2 项），0 失败。
+
+## 测试结果（TASK-010）
+
+| 测试 | 实际结果 | 状态 |
+| --- | --- | --- |
+| TASK-010 专项测试 | 5/5，覆盖请求契约、调度、失败计数、恢复、401、UI 和应用接入 | 通过 |
+| 干净全量构建 | CMake `clean` + `--fresh`，106/106 步成功 | 通过 |
+| CTest 全量回归 | 21/21，0 失败 | 通过 |
+| 串行范围扫描 | 未新增 MQTT 连接、订阅或重连实现 | 通过 |
+
+## 会话：2026-08-15（TASK-010）
+
+### Phase 32：TASK-010 契约确认与现有边界分析
+
+- **Status:** in_progress
+- 已完整复读项目约束、README、REQ-001、架构设计、TASK-010 及全部持久化记录。
+- 已确认前置提交 `ae4c299` 为已验收 TASK-009，工作区只有用户 `.qtcreator/`，保持不修改。
+- 已检查 `HttpClient`、`Heartbeat` 生产超时策略、`SessionService`、`Application`/`AppController`、主窗口侧栏和现有测试 Mock。
+- 实现边界固定为 Heartbeat API、HeartbeatService、HTTP 三态、合法 HTTP 响应统一观察、401 会话失效及 UI 接入；不实施 TASK-011 或后续功能。
+- 发现首次心跳发送时机和 TLS 失败是否计数两项会改变状态流程且文档未明确，按用户要求在修改生产代码前等待确认。
+- 用户已确认首次心跳立即发送、之后每 30 秒发送一次，并确认 TLS 失败计入连续失败；进入 TASK-010 实现阶段。
 | TASK-001 回归 | Qt MQTT 6.11.1 幂等引导、包探测、编译链接 | 通过 |
 | 文档与编码 | UTF-8 58/58、TASK 22/22、AC 20/20、diff check | 通过 |
 | 串行范围 | 未实现 TASK-010 心跳或任何后续业务模块 | 通过 |

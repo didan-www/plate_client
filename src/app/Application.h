@@ -8,6 +8,8 @@
 #include <memory>
 
 class AuthApiClient;
+class HeartbeatApiClient;
+class HeartbeatService;
 class HttpClient;
 class QSettings;
 class SessionService;
@@ -39,6 +41,8 @@ private:
     std::unique_ptr<SessionService> sessionService_;
     std::unique_ptr<HttpClient> httpClient_;
     std::unique_ptr<AuthApiClient> authApiClient_;
+    std::unique_ptr<HeartbeatApiClient> heartbeatApiClient_;
+    std::unique_ptr<HeartbeatService> heartbeatService_;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<AppController> controller_;
 };

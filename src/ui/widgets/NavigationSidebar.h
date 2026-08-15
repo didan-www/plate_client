@@ -1,5 +1,7 @@
 #pragma once
 
+#include "services/HttpConnectivityState.h"
+
 #include <QWidget>
 
 class ConnectionStatusIndicator;
@@ -23,6 +25,7 @@ public:
 
     [[nodiscard]] ConnectionStatusIndicator *httpStatusIndicator() const noexcept;
     [[nodiscard]] ConnectionStatusIndicator *mqttStatusIndicator() const noexcept;
+    void setHttpConnectivityState(HttpConnectivityState state);
 
 signals:
     void pageRequested(int pageIndex);

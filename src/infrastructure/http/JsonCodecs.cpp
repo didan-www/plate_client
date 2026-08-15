@@ -522,6 +522,20 @@ ProtocolResult<QByteArray> JsonCodecs::encodeLoginRequest(const QString &usernam
                              {QStringLiteral("clientId"), clientId.toString(QUuid::WithoutBraces)}});
 }
 
+ProtocolResult<QByteArray> JsonCodecs::encodeHeartbeatRequest(const QUuid &clientId,
+                                                              const QString &appVersion)
+{
+    if (clientId.isNull()) return ProtocolResult<QByteArray>::failure(
+        error(ProtocolErrorCode::InvalidValue, QStringLiteral("$.clientId"),
+              QStringLiteral("客户端 ID 必须是有效 UUID。")));
+    if (appVersion.isEmpty()) return ProtocolResult<QByteArray>::failure(
+        error(ProtocolErrorCode::InvalidValue, QStringLiteral("$.appVersion"),
+              QStringLiteral("应用版本不得为空。")));
+    return encodeJsonObject(
+        {{QStringLiteral("clientId"), clientId.toString(QUuid::WithoutBraces)},
+         {QStringLiteral("appVersion"), appVersion}});
+}
+
 ProtocolResult<QByteArray> JsonCodecs::encodeAccessListCreateRequest(AccessListType listType,
                                                                     const QString &plateNumber,
                                                                     const QString &remark)

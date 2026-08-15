@@ -107,6 +107,7 @@ private slots:
     void streamsCsvWithoutBuffering();
     void preservesJsonErrorForCsvRequest();
     void distinguishesHttpAndParseErrors();
+    void reportsOnlyObservedHttpResponses();
     void rejectsRedirectsWithoutFollowing();
     void distinguishesNetworkTlsTimeoutAndCancellation();
     void destroyingHandleStopsRequestWithoutCallback();
@@ -347,6 +348,62 @@ void HttpClientTest::distinguishesHttpAndParseErrors()
             QCOMPARE(errorFrom(failure).httpStatus().value(), index == 0 ? 404 : 503);
         }
     }
+}
+
+void HttpClientTest::reportsOnlyObservedHttpResponses()
+{
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    server.enqueueResponse(jsonResponse(503, QByteArrayLiteral("{\"success\":false}")));
+    server.enqueueResponse(jsonResponse(200, QByteArrayLiteral("{bad")));
+    MockHttpResponse incomplete = jsonResponse();
+    incomplete.declaredContentLength = 100;
+    incomplete.chunks = {QByteArrayLiteral("{")};
+    incomplete.disconnectAfterChunks = 1;
+    server.enqueueResponse(incomplete);
+    MockHttpResponse incompleteError = jsonResponse(503, QByteArrayLiteral("{"));
+    incompleteError.declaredContentLength = 100;
+    incompleteError.disconnectAfterChunks = 1;
+    server.enqueueResponse(incompleteError);
+
+    HttpClient client;
+    QSignalSpy responses(&client, &HttpClient::responseReceived);
+
+    HttpRequestHandle *serverError = client.send(jsonGet(server.url(QStringLiteral("/503"))));
+    QSignalSpy firstFailure(serverError, &HttpRequestHandle::failed);
+    QVERIFY(firstFailure.wait());
+    QCOMPARE(responses.count(), 1);
+    QCOMPARE(responses.first().at(0).toInt(), 503);
+    QCOMPARE(responses.first().at(1).toULongLong(), quint64(1));
+
+    HttpRequestHandle *parseError = client.send(jsonGet(server.url(QStringLiteral("/parse"))));
+    QSignalSpy secondFailure(parseError, &HttpRequestHandle::failed);
+    QVERIFY(secondFailure.wait());
+    QCOMPARE(responses.count(), 2);
+    QCOMPARE(responses.last().at(0).toInt(), 200);
+
+    HttpRequestHandle *networkError = client.send(jsonGet(server.url(QStringLiteral("/partial"))));
+    QSignalSpy thirdFailure(networkError, &HttpRequestHandle::failed);
+    QVERIFY(thirdFailure.wait());
+    QCOMPARE(errorFrom(thirdFailure).code(), HttpErrorCode::NetworkError);
+    QCOMPARE(responses.count(), 2);
+
+    HttpRequestHandle *incompleteServerError = client.send(
+        jsonGet(server.url(QStringLiteral("/partial-503"))));
+    QSignalSpy fourthFailure(incompleteServerError, &HttpRequestHandle::failed);
+    QVERIFY(fourthFailure.wait());
+    QCOMPARE(responses.count(), 2);
+
+    MockHttpResponse oversized = jsonResponse();
+    oversized.declaredContentLength = HttpRequestPolicy::jsonMaximumBytes + 1;
+    server.enqueueResponse(oversized);
+    HttpClient staleClient([](const RequestContext &) { return false; });
+    QSignalSpy staleResponses(&staleClient, &HttpClient::responseReceived);
+    HttpRequestHandle *staleOversized = staleClient.send(
+        jsonGet(server.url(QStringLiteral("/stale-oversized"))));
+    QSignalSpy staleFailure(staleOversized, &HttpRequestHandle::failed);
+    QVERIFY(staleFailure.wait());
+    QCOMPARE(staleResponses.count(), 0);
 }
 
 void HttpClientTest::rejectsRedirectsWithoutFollowing()

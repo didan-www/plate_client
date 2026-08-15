@@ -2,10 +2,13 @@
 
 #include "infrastructure/config/BootstrapConfigLoader.h"
 #include "infrastructure/http/AuthApiClient.h"
+#include "infrastructure/http/HeartbeatApiClient.h"
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/logging/TechnicalLogger.h"
-#include "services/SessionService.h"
 #include "domain/RequestContext.h"
+#include "services/HeartbeatService.h"
+#include "services/SessionService.h"
+#include "ui/widgets/NavigationSidebar.h"
 #include "ui/windows/MainWindow.h"
 
 #include <QMessageBox>
@@ -20,16 +23,12 @@ void showStartupError(const QString &message)
     QMessageBox::critical(nullptr, QStringLiteral("启动失败"), message);
 }
 
-QWidget *createMainWindow(const QString &displayName)
-{
-    return new MainWindow(displayName);
-}
 } // namespace
 
 Application::Application(StartupErrorPresenter errorPresenter,
                          AppController::WindowFactory windowFactory)
     : errorPresenter_(errorPresenter ? std::move(errorPresenter) : showStartupError)
-    , windowFactory_(windowFactory ? std::move(windowFactory) : createMainWindow)
+    , windowFactory_(std::move(windowFactory))
 {
 }
 
@@ -77,10 +76,29 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                                      config.clientId(),
                                                      httpClient_.get(),
                                                      sessionService_.get());
+    heartbeatApiClient_ = std::make_unique<HeartbeatApiClient>(config.loginBaseUrl(),
+                                                               config.clientId(),
+                                                               QStringLiteral(PLATE_CLIENT_VERSION),
+                                                               httpClient_.get(),
+                                                               sessionService_.get());
+    heartbeatService_ = std::make_unique<HeartbeatService>(heartbeatApiClient_.get(),
+                                                           httpClient_.get(),
+                                                           sessionService_.get());
     settings_ = std::make_unique<QSettings>();
+    AppController::WindowFactory authenticatedWindowFactory = windowFactory_;
+    if (!authenticatedWindowFactory) {
+        authenticatedWindowFactory = [heartbeat = heartbeatService_.get()](
+                                         const QString &displayName) {
+            auto *window = new MainWindow(displayName);
+            window->sidebar()->setHttpConnectivityState(heartbeat->state());
+            QObject::connect(heartbeat, &HeartbeatService::stateChanged,
+                             window->sidebar(), &NavigationSidebar::setHttpConnectivityState);
+            return window;
+        };
+    }
     controller_ = std::make_unique<AppController>(authApiClient_.get(),
                                                   settings_.get(),
-                                                  windowFactory_);
+                                                  std::move(authenticatedWindowFactory));
     controller_->start();
     return true;
 }

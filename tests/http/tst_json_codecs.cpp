@@ -11,6 +11,7 @@ class JsonCodecsTest final : public QObject
 
 private slots:
     void encodesLoginAndAccessListRequests();
+    void encodesHeartbeatRequest();
     void decodesValidLoginEnvelope();
     void rejectsInvalidLoginContracts_data();
     void rejectsInvalidLoginContracts();
@@ -118,6 +119,20 @@ void JsonCodecsTest::encodesLoginAndAccessListRequests()
     QVERIFY(accessObject.contains(QStringLiteral("remark")));
     QVERIFY(!JsonCodecs::encodeAccessListCreateRequest(
         AccessListType::White, QStringLiteral(" ab123 "), QString()).isSuccess());
+}
+
+void JsonCodecsTest::encodesHeartbeatRequest()
+{
+    const QUuid clientId(QStringLiteral("12345678-1234-4abc-8def-1234567890ab"));
+    const auto result = JsonCodecs::encodeHeartbeatRequest(clientId, QStringLiteral("0.1.1"));
+    QVERIFY(result.isSuccess());
+    const QJsonObject object = QJsonDocument::fromJson(*result.value()).object();
+    QCOMPARE(object.keys().size(), 2);
+    QCOMPARE(object.value(QStringLiteral("clientId")).toString(),
+             QStringLiteral("12345678-1234-4abc-8def-1234567890ab"));
+    QCOMPARE(object.value(QStringLiteral("appVersion")).toString(), QStringLiteral("0.1.1"));
+    QVERIFY(!JsonCodecs::encodeHeartbeatRequest(QUuid(), QStringLiteral("0.1.1")).isSuccess());
+    QVERIFY(!JsonCodecs::encodeHeartbeatRequest(clientId, QString()).isSuccess());
 }
 
 void JsonCodecsTest::decodesValidLoginEnvelope()

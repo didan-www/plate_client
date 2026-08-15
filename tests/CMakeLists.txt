@@ -45,6 +45,13 @@ add_executable(
 )
 
 add_executable(
+    tst_heartbeat_service
+    services/tst_heartbeat_service.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     tst_login_window
     ui/tst_login_window.cpp
 )
@@ -52,6 +59,11 @@ add_executable(
 add_executable(
     tst_main_window_shell
     ui/tst_main_window_shell.cpp
+)
+
+add_executable(
+    tst_http_status_indicator
+    ui/tst_http_status_indicator.cpp
 )
 
 add_executable(
@@ -69,6 +81,8 @@ add_executable(
 add_executable(
     tst_application_startup
     app/tst_application_startup.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
 )
 
 plate_client_apply_project_options(tst_smoke)
@@ -79,8 +93,10 @@ plate_client_apply_project_options(tst_json_codecs)
 plate_client_apply_project_options(tst_http_client)
 plate_client_apply_project_options(tst_auth_api_client)
 plate_client_apply_project_options(tst_session_service)
+plate_client_apply_project_options(tst_heartbeat_service)
 plate_client_apply_project_options(tst_login_window)
 plate_client_apply_project_options(tst_main_window_shell)
+plate_client_apply_project_options(tst_http_status_indicator)
 plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
@@ -153,6 +169,16 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_heartbeat_service PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_heartbeat_service
+    PRIVATE
+        plate_client_heartbeat
+        Qt6::Network
+        Qt6::Test
+)
+
 target_link_libraries(
     tst_login_window
     PRIVATE
@@ -162,6 +188,13 @@ target_link_libraries(
 
 target_link_libraries(
     tst_main_window_shell
+    PRIVATE
+        plate_client_ui
+        Qt6::Test
+)
+
+target_link_libraries(
+    tst_http_status_indicator
     PRIVATE
         plate_client_ui
         Qt6::Test
@@ -188,8 +221,11 @@ target_link_libraries(
     tst_application_startup
     PRIVATE
         plate_client_app
+        Qt6::Network
         Qt6::Test
 )
+
+target_include_directories(tst_application_startup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_test(NAME unit.smoke COMMAND tst_smoke)
 add_test(NAME unit.bootstrap_config COMMAND tst_bootstrap_config)
@@ -199,6 +235,7 @@ add_test(NAME unit.json_codecs COMMAND tst_json_codecs)
 add_test(NAME unit.http_client COMMAND tst_http_client)
 add_test(NAME unit.auth_api_client COMMAND tst_auth_api_client)
 add_test(NAME unit.session_service COMMAND tst_session_service)
+add_test(NAME unit.heartbeat_service COMMAND tst_heartbeat_service)
 add_test(NAME unit.login_window COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi100 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi150 COMMAND tst_login_window)
@@ -207,6 +244,7 @@ add_test(NAME unit.main_window_shell COMMAND tst_main_window_shell)
 add_test(NAME unit.main_window_shell.dpi100 COMMAND tst_main_window_shell)
 add_test(NAME unit.main_window_shell.dpi150 COMMAND tst_main_window_shell)
 add_test(NAME unit.main_window_shell.dpi200 COMMAND tst_main_window_shell)
+add_test(NAME unit.http_status_indicator COMMAND tst_http_status_indicator)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
@@ -220,6 +258,7 @@ set_tests_properties(
     unit.http_client
     unit.auth_api_client
     unit.session_service
+    unit.heartbeat_service
     unit.login_window
     unit.login_window.dpi100
     unit.login_window.dpi150
@@ -228,6 +267,7 @@ set_tests_properties(
     unit.main_window_shell.dpi100
     unit.main_window_shell.dpi150
     unit.main_window_shell.dpi200
+    unit.http_status_indicator
     unit.app_controller_login
     unit.application_startup
     app.startup

@@ -56,6 +56,15 @@ add_library(
 )
 
 add_library(
+    plate_client_heartbeat STATIC
+    services/HttpConnectivityState.h
+    infrastructure/http/HeartbeatApiClient.h
+    infrastructure/http/HeartbeatApiClient.cpp
+    services/HeartbeatService.h
+    services/HeartbeatService.cpp
+)
+
+add_library(
     plate_client_ui STATIC
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
@@ -109,6 +118,23 @@ target_link_libraries(
         Qt6::Core
 )
 
+plate_client_apply_project_options(plate_client_heartbeat)
+
+target_include_directories(
+    plate_client_heartbeat
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_heartbeat
+    PUBLIC
+        plate_client_auth
+        plate_client_http
+        plate_client_protocol
+        Qt6::Core
+)
+
 plate_client_apply_project_options(plate_client_ui)
 
 target_include_directories(
@@ -137,6 +163,7 @@ target_link_libraries(
         plate_client_auth
         plate_client_config
         plate_client_http
+        plate_client_heartbeat
         plate_client_logging
         plate_client_ui
         Qt6::Widgets

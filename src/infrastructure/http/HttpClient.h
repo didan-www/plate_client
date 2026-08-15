@@ -137,6 +137,9 @@ public:
 
     [[nodiscard]] HttpRequestHandle *send(HttpRequest &&request);
 
+signals:
+    void responseReceived(int statusCode, quint64 sessionGeneration);
+
 private:
     QNetworkAccessManager *networkManager_;
     ContextValidator contextValidator_;
