@@ -80,6 +80,14 @@ add_library(
 )
 
 add_library(
+    plate_client_reconciliation STATIC
+    infrastructure/http/RecognitionApiClient.h
+    infrastructure/http/RecognitionApiClient.cpp
+    services/ReconnectReconciler.h
+    services/ReconnectReconciler.cpp
+)
+
+add_library(
     plate_client_ui STATIC
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
@@ -192,6 +200,26 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+plate_client_apply_project_options(plate_client_reconciliation)
+
+target_include_directories(
+    plate_client_reconciliation
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_reconciliation
+    PUBLIC
+        plate_client_auth
+        plate_client_heartbeat
+        plate_client_http
+        plate_client_mqtt
+        plate_client_protocol
+        plate_client_realtime
+        Qt6::Core
+)
+
 target_link_libraries(
     plate_client_realtime
     PUBLIC
@@ -217,6 +245,7 @@ target_link_libraries(
         plate_client_heartbeat
         plate_client_logging
         plate_client_mqtt
+        plate_client_reconciliation
         plate_client_realtime
         plate_client_ui
         Qt6::Widgets

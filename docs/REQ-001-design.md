@@ -437,7 +437,11 @@ sequenceDiagram
     end
 ```
 
-查询失败时保留当前状态。HTTP 后续恢复在线时，如果当前仍是 `PROCESSING`，允许再次发起一次校准。
+`ReconnectReconciler` 以每次 MQTT 断线后重新连接并订阅成功为一个重连周期。周期建立时只捕获当时当前且仍为 `PROCESSING` 的 `recognitionId`，每个周期最多保留一次 HTTP 从“异常”恢复为“在线”后的补偿资格；初次校准失败或返回不可合并快照均不循环查询，也不加载其他断线历史。
+
+每次校准使用独立递增的 `requestGeneration`。响应合并前必须同时验证当前登录 `sessionGeneration`、活动请求代次、活动请求句柄以及 Store 当前 `recognitionId`；响应中的 `recognitionId` 还必须与请求路径中的 ID 完全一致。新重连周期、当前记录变化、会话失效或协调器销毁时取消旧请求，即使取消回调晚到也只能被丢弃。
+
+HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍有补偿资格且绑定记录仍为 `PROCESSING` 才允许补偿查询一次。活动校准请求自身收到合法 HTTP 响应而造成的 `Online` 状态变化不得立即触发第二次查询；新的 MQTT 断线重连周期才可建立新的单次补偿资格。查询失败时保留当前状态。
 
 ## 14. 历史查询和 CSV
 

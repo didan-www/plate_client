@@ -71,23 +71,32 @@ QJsonObject sessionData()
     };
 }
 
-QByteArray recognitionEvent()
+QByteArray recognitionEvent(qint64 revision = 1,
+                            const QString &status = QStringLiteral("PROCESSING"))
 {
+    const bool completed = status != QStringLiteral("PROCESSING");
     return QJsonDocument(QJsonObject {
                              {QStringLiteral("schemaVersion"), 1},
                              {QStringLiteral("recognitionId"), QStringLiteral("rec-live")},
-                             {QStringLiteral("revision"), 1},
+                             {QStringLiteral("revision"), revision},
                              {QStringLiteral("deviceId"), QStringLiteral("device-1")},
-                             {QStringLiteral("status"), QStringLiteral("PROCESSING")},
-                             {QStringLiteral("plateNumber"), QJsonValue::Null},
+                             {QStringLiteral("status"), status},
+                             {QStringLiteral("plateNumber"),
+                              status == QStringLiteral("SUCCEEDED")
+                                  ? QJsonValue(QStringLiteral("京A12345"))
+                                  : QJsonValue(QJsonValue::Null)},
                              {QStringLiteral("errorCode"), QJsonValue::Null},
                              {QStringLiteral("errorMessage"), QJsonValue::Null},
                              {QStringLiteral("capturedAt"),
                               QStringLiteral("2026-08-12T10:00:00+08:00")},
                              {QStringLiteral("startedAt"),
                               QStringLiteral("2026-08-12T10:00:01+08:00")},
-                             {QStringLiteral("completedAt"), QJsonValue::Null},
-                             {QStringLiteral("durationMs"), QJsonValue::Null},
+                             {QStringLiteral("completedAt"),
+                              completed
+                                  ? QJsonValue(QStringLiteral("2026-08-12T10:00:02+08:00"))
+                                  : QJsonValue(QJsonValue::Null)},
+                             {QStringLiteral("durationMs"),
+                              completed ? QJsonValue(1000) : QJsonValue(QJsonValue::Null)},
                          })
         .toJson(QJsonDocument::Compact);
 }
@@ -209,6 +218,20 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
              QStringLiteral("rec-live"));
     QCOMPARE(runtime.realtimeStore()->current()->recognitionId(),
              QStringLiteral("rec-live"));
+    QVERIFY(runtime.reconnectReconciler());
+    QTest::qWait(20);
+    QCOMPARE(server.requests().size(), 2);
+
+    server.enqueueResponse(jsonResponse(envelope(
+        QJsonDocument::fromJson(recognitionEvent(2, QStringLiteral("SUCCEEDED"))).object())));
+    mqttClient.reportDisconnected(mqttClient.configuredGeneration);
+    mqttClient.reportConnected(mqttClient.configuredGeneration);
+    mqttClient.reportSubscriptionSucceeded(mqttClient.configuredGeneration);
+    QTRY_COMPARE(server.requests().size(), 3);
+    QCOMPARE(server.requests().at(2).target,
+             QByteArrayLiteral("/api/v1/recognitions/rec-live"));
+    QTRY_COMPARE(runtime.realtimeStore()->current()->revision(), qint64(2));
+    QCOMPARE(runtime.realtimeStore()->current()->status(), RecognitionStatus::Succeeded);
 }
 
 QTEST_MAIN(ApplicationStartupTest)

@@ -577,6 +577,8 @@ TASK-012 已验收。
 - 实现 `ReconnectReconciler`，仅在重新连接并订阅成功后检查当前记录。
 - 查询结果按 revision 合并；失败保留当前状态。
 - HTTP 从“异常”首次恢复“在线”时，若当前仍在处理，只补偿查询一次。
+- 重连周期绑定订阅成功时的当前 `PROCESSING` ID；新周期、当前记录变化、会话失效或销毁时取消旧请求。
+- 响应合并前复核会话代次、请求代次、活动句柄、当前 ID 和响应 ID；活动校准响应自身导致的 HTTP 在线状态不得触发立即二次查询。
 
 **预计修改文件**
 
@@ -586,6 +588,9 @@ TASK-012 已验收。
 - `src/services/ReconnectReconciler.cpp`
 - `tests/http/tst_recognition_api_detail.cpp`
 - `tests/services/tst_reconnect_reconciler.cpp`
+- `src/app/Application.h`
+- `src/app/Application.cpp`
+- `tests/app/tst_application_startup.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
@@ -594,6 +599,8 @@ TASK-012 已验收。
 - 覆盖当前为空、当前已完成、当前处理中以及查询返回更高/相同/更低 revision。
 - 验证查询失败不循环；HTTP 恢复时只补偿一次。
 - 验证校准不加载其他断线历史记录。
+- 验证新周期、当前记录变化、会话失效和销毁会取消旧请求，旧回调不能合并。
+- 验证 `Application` 在登录会话、MQTT 订阅、HTTP 状态和实时 Store 之间完成协调器组合。
 
 **验收标准**
 

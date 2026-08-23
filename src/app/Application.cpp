@@ -4,12 +4,14 @@
 #include "infrastructure/http/AuthApiClient.h"
 #include "infrastructure/http/HeartbeatApiClient.h"
 #include "infrastructure/http/HttpClient.h"
+#include "infrastructure/http/RecognitionApiClient.h"
 #include "infrastructure/logging/TechnicalLogger.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
 #include "infrastructure/mqtt/RecognitionEventCodec.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
 #include "services/RealtimeRecognitionStore.h"
+#include "services/ReconnectReconciler.h"
 #include "services/SessionService.h"
 #include "ui/widgets/NavigationSidebar.h"
 #include "ui/windows/MainWindow.h"
@@ -59,6 +61,11 @@ RealtimeRecognitionStore *Application::realtimeStore() const noexcept
     return realtimeStore_.get();
 }
 
+ReconnectReconciler *Application::reconnectReconciler() const noexcept
+{
+    return reconnectReconciler_.get();
+}
+
 bool Application::runtimeInitialized() const noexcept
 {
     return controller_ != nullptr;
@@ -91,6 +98,9 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                                                QStringLiteral(PLATE_CLIENT_VERSION),
                                                                httpClient_.get(),
                                                                sessionService_.get());
+    recognitionApiClient_ = std::make_unique<RecognitionApiClient>(config.loginBaseUrl(),
+                                                                   httpClient_.get(),
+                                                                   sessionService_.get());
     heartbeatService_ = std::make_unique<HeartbeatService>(heartbeatApiClient_.get(),
                                                            httpClient_.get(),
                                                            sessionService_.get());
@@ -106,6 +116,11 @@ bool Application::initialize(BootstrapConfigLoadResult result)
     Q_ASSERT(mqttSubscriber_);
     recognitionEventCodec_ = std::make_unique<RecognitionEventCodec>(logger_.get());
     realtimeStore_ = std::make_unique<RealtimeRecognitionStore>(sessionService_.get());
+    reconnectReconciler_ = std::make_unique<ReconnectReconciler>(recognitionApiClient_.get(),
+                                                                  mqttSubscriber_.get(),
+                                                                  heartbeatService_.get(),
+                                                                  realtimeStore_.get(),
+                                                                  sessionService_.get());
     QObject::connect(
         mqttSubscriber_.get(), &MqttRecognitionSubscriber::eventPayloadReceived,
         realtimeStore_.get(),

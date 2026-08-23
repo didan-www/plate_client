@@ -68,6 +68,21 @@ add_executable(
 )
 
 add_executable(
+    tst_recognition_api_detail
+    http/tst_recognition_api_detail.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
+    tst_reconnect_reconciler
+    services/tst_reconnect_reconciler.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
     tst_login_window
     ui/tst_login_window.cpp
 )
@@ -114,6 +129,8 @@ plate_client_apply_project_options(tst_heartbeat_service)
 plate_client_apply_project_options(tst_mqtt_subscriber)
 plate_client_apply_project_options(tst_recognition_event_codec)
 plate_client_apply_project_options(tst_realtime_store)
+plate_client_apply_project_options(tst_recognition_api_detail)
+plate_client_apply_project_options(tst_reconnect_reconciler)
 plate_client_apply_project_options(tst_login_window)
 plate_client_apply_project_options(tst_main_window_shell)
 plate_client_apply_project_options(tst_http_status_indicator)
@@ -222,6 +239,26 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_recognition_api_detail PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_recognition_api_detail
+    PRIVATE
+        plate_client_reconciliation
+        Qt6::Network
+        Qt6::Test
+)
+
+target_include_directories(tst_reconnect_reconciler PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_reconnect_reconciler
+    PRIVATE
+        plate_client_reconciliation
+        Qt6::Network
+        Qt6::Test
+)
+
 target_link_libraries(
     tst_login_window
     PRIVATE
@@ -282,6 +319,8 @@ add_test(NAME unit.heartbeat_service COMMAND tst_heartbeat_service)
 add_test(NAME unit.mqtt_subscriber COMMAND tst_mqtt_subscriber)
 add_test(NAME unit.recognition_event_codec COMMAND tst_recognition_event_codec)
 add_test(NAME unit.realtime_store COMMAND tst_realtime_store)
+add_test(NAME unit.recognition_api_detail COMMAND tst_recognition_api_detail)
+add_test(NAME unit.reconnect_reconciler COMMAND tst_reconnect_reconciler)
 add_test(NAME unit.login_window COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi100 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi150 COMMAND tst_login_window)
@@ -308,6 +347,8 @@ set_tests_properties(
     unit.mqtt_subscriber
     unit.recognition_event_codec
     unit.realtime_store
+    unit.recognition_api_detail
+    unit.reconnect_reconciler
     unit.login_window
     unit.login_window.dpi100
     unit.login_window.dpi150
