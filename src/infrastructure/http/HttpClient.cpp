@@ -178,6 +178,11 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
     QNetworkRequest networkRequest(state->request.url());
     networkRequest.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                                 QNetworkRequest::ManualRedirectPolicy);
+    if (state->request.responseMode() == HttpResponseMode::ImageMemory) {
+        networkRequest.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
+                                    QNetworkRequest::AlwaysNetwork);
+        networkRequest.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+    }
     networkRequest.setRawHeader(QByteArrayLiteral("Accept"),
                                 HttpRequestPolicy::acceptHeader(state->request.responseMode()));
     if (state->request.responseMode() == HttpResponseMode::JsonMemory) {

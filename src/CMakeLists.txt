@@ -81,8 +81,11 @@ add_library(
 
 add_library(
     plate_client_reconciliation STATIC
+    domain/ImageLoadResult.h
     infrastructure/http/RecognitionApiClient.h
     infrastructure/http/RecognitionApiClient.cpp
+    services/ImageLoadService.h
+    services/ImageLoadService.cpp
     services/ReconnectReconciler.h
     services/ReconnectReconciler.cpp
 )
@@ -218,6 +221,8 @@ target_link_libraries(
         plate_client_protocol
         plate_client_realtime
         Qt6::Core
+        Qt6::Concurrent
+        Qt6::Gui
 )
 
 target_link_libraries(

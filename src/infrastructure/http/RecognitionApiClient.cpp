@@ -7,6 +7,7 @@
 
 #include <QTimer>
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -32,13 +33,14 @@ RecognitionApiErrorCode transportErrorCode(HttpErrorCode code)
         return RecognitionApiErrorCode::Cancelled;
     case HttpErrorCode::StaleResponse:
         return RecognitionApiErrorCode::StaleResponse;
+    case HttpErrorCode::ResponseTooLarge:
+        return RecognitionApiErrorCode::ResponseTooLarge;
     case HttpErrorCode::ClientError:
         return RecognitionApiErrorCode::ClientRejected;
     case HttpErrorCode::ServerError:
         return RecognitionApiErrorCode::ServerError;
     case HttpErrorCode::NetworkError:
         return RecognitionApiErrorCode::NetworkError;
-    case HttpErrorCode::ResponseTooLarge:
     case HttpErrorCode::ParseFailure:
     case HttpErrorCode::RedirectRejected:
         return RecognitionApiErrorCode::ProtocolError;
@@ -47,7 +49,8 @@ RecognitionApiErrorCode transportErrorCode(HttpErrorCode code)
 }
 
 RecognitionApiError mapTransportFailure(const HttpError &error,
-                                        const HttpResponse &response)
+                                        const HttpResponse &response,
+                                        const QString &requestDescription)
 {
     const std::optional<int> status = error.httpStatus();
     if ((error.code() == HttpErrorCode::ClientError
@@ -60,7 +63,7 @@ RecognitionApiError mapTransportFailure(const HttpError &error,
         auto envelope = decoded.takeValue();
         if (!envelope || envelope->success() || envelope->data().has_value()) {
             return RecognitionApiError(RecognitionApiErrorCode::ProtocolError,
-                                       QStringLiteral("识别详情错误响应不符合统一信封。"),
+                                       requestDescription + QStringLiteral("错误响应不符合统一信封。"),
                                        {},
                                        {},
                                        status);
@@ -78,7 +81,7 @@ RecognitionApiError mapTransportFailure(const HttpError &error,
         }
         return RecognitionApiError(code,
                                    envelope->message().isEmpty()
-                                       ? QStringLiteral("识别详情请求失败。")
+                                       ? requestDescription + QStringLiteral("请求失败。")
                                        : envelope->message(),
                                    envelope->code(),
                                    envelope->requestId(),
@@ -91,6 +94,32 @@ RecognitionApiError mapTransportFailure(const HttpError &error,
                                {},
                                status,
                                error.protocolError());
+}
+
+std::optional<QByteArray> declaredImageFormat(const HttpResponse &response)
+{
+    std::optional<QByteArray> value;
+    for (const auto &header : response.headers()) {
+        if (header.first.trimmed().compare(QByteArrayLiteral("Content-Type"),
+                                           Qt::CaseInsensitive)
+            != 0) {
+            continue;
+        }
+        if (value.has_value()) {
+            return std::nullopt;
+        }
+        value = header.second.trimmed().toLower();
+    }
+    if (!value.has_value()) {
+        return std::nullopt;
+    }
+    if (*value == QByteArrayLiteral("image/jpeg")) {
+        return QByteArrayLiteral("jpeg");
+    }
+    if (*value == QByteArrayLiteral("image/png")) {
+        return QByteArrayLiteral("png");
+    }
+    return std::nullopt;
 }
 } // namespace
 
@@ -239,7 +268,141 @@ RecognitionDetailRequestHandle *RecognitionApiClient::getDetail(
                 if (error.httpStatus() == 401) {
                     sessionService_->handleUnauthorized(response.context().sessionGeneration());
                 }
-                handle->completeFailure(mapTransportFailure(error, response));
+                handle->completeFailure(mapTransportFailure(
+                    error, response, QStringLiteral("识别详情")));
+            });
+    return handle;
+}
+
+RecognitionImageRequestHandle::RecognitionImageRequestHandle(RequestContext context,
+                                                             QObject *parent)
+    : QObject(parent)
+    , context_(std::move(context))
+{
+}
+
+RecognitionImageRequestHandle::~RecognitionImageRequestHandle()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+void RecognitionImageRequestHandle::cancel()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+const RequestContext &RecognitionImageRequestHandle::context() const noexcept
+{
+    return context_;
+}
+
+const QByteArray &RecognitionImageRequestHandle::imageBytes() const noexcept
+{
+    return imageBytes_;
+}
+
+const QByteArray &RecognitionImageRequestHandle::declaredFormat() const noexcept
+{
+    return declaredFormat_;
+}
+
+void RecognitionImageRequestHandle::completeSuccess(QByteArray imageBytes,
+                                                     QByteArray declaredFormat)
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    imageBytes_ = std::move(imageBytes);
+    declaredFormat_ = std::move(declaredFormat);
+    QPointer<RecognitionImageRequestHandle> guarded(this);
+    emit succeeded();
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
+void RecognitionImageRequestHandle::completeFailure(RecognitionApiError error)
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    QPointer<RecognitionImageRequestHandle> guarded(this);
+    emit failed(error);
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
+RecognitionImageRequestHandle *RecognitionApiClient::getImage(
+    const QString &recognitionId,
+    quint64 sessionGeneration,
+    quint64 requestGeneration)
+{
+    const RequestContext context(sessionGeneration,
+                                 requestGeneration,
+                                 QStringLiteral("recognition.image"),
+                                 recognitionId);
+    auto *handle = new RecognitionImageRequestHandle(context, this);
+    connect(handle, &RecognitionImageRequestHandle::finished, handle, &QObject::deleteLater);
+
+    QString accessToken;
+    const bool hasToken = sessionService_->withAccessToken(
+        sessionGeneration,
+        [&accessToken](const QString &token) { accessToken = token; });
+    if (recognitionId.isEmpty() || sessionGeneration == 0 || requestGeneration == 0
+        || !hasToken) {
+        QTimer::singleShot(0, handle,
+                           [handle, recognitionId, sessionGeneration, requestGeneration] {
+            const bool invalidRequest = recognitionId.isEmpty() || sessionGeneration == 0
+                                        || requestGeneration == 0;
+            handle->completeFailure(RecognitionApiError(
+                invalidRequest ? RecognitionApiErrorCode::InvalidRequest
+                               : RecognitionApiErrorCode::StaleResponse,
+                invalidRequest ? QStringLiteral("图片请求上下文无效。")
+                               : QStringLiteral("图片请求会话已经失效。")));
+        });
+        return handle;
+    }
+
+    HttpRequest request(HttpMethod::Get,
+                        imageEndpoint(recognitionId),
+                        HttpRequestKind::Image,
+                        HttpResponseMode::ImageMemory,
+                        context,
+                        {},
+                        std::move(accessToken));
+    HttpRequestHandle *transport = httpClient_->send(std::move(request));
+    handle->transportHandle_ = transport;
+    connect(transport, &HttpRequestHandle::succeeded, handle,
+            [handle](const HttpResponse &response) {
+                if (handle->completed_) {
+                    return;
+                }
+                const auto format = declaredImageFormat(response);
+                if (!format.has_value()) {
+                    handle->completeFailure(RecognitionApiError(
+                        RecognitionApiErrorCode::InvalidContentType,
+                        QStringLiteral("图片响应 Content-Type 无效。"),
+                        {},
+                        {},
+                        response.statusCode()));
+                    return;
+                }
+                handle->completeSuccess(response.body(), *format);
+            });
+    connect(transport, &HttpRequestHandle::failed, handle,
+            [this, handle](const HttpError &error, const HttpResponse &response) {
+                if (error.httpStatus() == 401) {
+                    sessionService_->handleUnauthorized(response.context().sessionGeneration());
+                }
+                handle->completeFailure(mapTransportFailure(
+                    error, response, QStringLiteral("识别图片")));
             });
     return handle;
 }
@@ -253,6 +416,20 @@ QUrl RecognitionApiClient::detailEndpoint(const QString &recognitionId) const
     }
     const QString encodedId = QString::fromLatin1(QUrl::toPercentEncoding(recognitionId));
     result.setPath(prefix + QStringLiteral("/api/v1/recognitions/") + encodedId,
+                   QUrl::TolerantMode);
+    return result;
+}
+
+QUrl RecognitionApiClient::imageEndpoint(const QString &recognitionId) const
+{
+    QUrl result = loginBaseUrl_;
+    QString prefix = result.path();
+    if (prefix.endsWith(QLatin1Char('/'))) {
+        prefix.chop(1);
+    }
+    const QString encodedId = QString::fromLatin1(QUrl::toPercentEncoding(recognitionId));
+    result.setPath(prefix + QStringLiteral("/api/v1/recognitions/") + encodedId
+                       + QStringLiteral("/image"),
                    QUrl::TolerantMode);
     return result;
 }

@@ -90,6 +90,50 @@ protected:
         return new TlsErrorReply(request, this);
     }
 };
+
+class ImmediateSuccessReply final : public QNetworkReply
+{
+public:
+    explicit ImmediateSuccessReply(const QNetworkRequest &request, QObject *parent = nullptr)
+        : QNetworkReply(parent)
+    {
+        setRequest(request);
+        setUrl(request.url());
+        setAttribute(QNetworkRequest::HttpStatusCodeAttribute, 200);
+        setRawHeader(QByteArrayLiteral("Content-Length"), QByteArrayLiteral("0"));
+        open(QIODevice::ReadOnly);
+        QTimer::singleShot(0, this, [this] {
+            setFinished(true);
+            emit finished();
+        });
+    }
+
+    void abort() override {}
+
+protected:
+    qint64 readData(char *, qint64) override { return -1; }
+};
+
+class RecordingNetworkManager final : public QNetworkAccessManager
+{
+public:
+    [[nodiscard]] const QNetworkRequest &recordedRequest() const noexcept
+    {
+        return recordedRequest_;
+    }
+
+protected:
+    QNetworkReply *createRequest(Operation,
+                                 const QNetworkRequest &request,
+                                 QIODevice *) override
+    {
+        recordedRequest_ = request;
+        return new ImmediateSuccessReply(request, this);
+    }
+
+private:
+    QNetworkRequest recordedRequest_;
+};
 } // namespace
 
 class HttpClientTest final : public QObject
@@ -103,6 +147,7 @@ private slots:
     void sendsDeleteRequestBody();
     void acceptsJsonAtExactLimit();
     void acceptsImageAtExactLimit();
+    void forcesImageNetworkWithoutSavingCache();
     void rejectsDeclaredAndChunkedOversize();
     void streamsCsvWithoutBuffering();
     void preservesJsonErrorForCsvRequest();
@@ -238,6 +283,30 @@ void HttpClientTest::acceptsImageAtExactLimit()
     QVERIFY(success.wait(10000));
     QCOMPARE(failure.count(), 0);
     QCOMPARE(responseFrom(success).body().size(), HttpRequestPolicy::imageMaximumBytes);
+}
+
+void HttpClientTest::forcesImageNetworkWithoutSavingCache()
+{
+    RecordingNetworkManager manager;
+    HttpClient client(&manager, {}, {}, nullptr);
+    HttpRequest request(HttpMethod::Get,
+                        QUrl(QStringLiteral("https://example.test/image")),
+                        HttpRequestKind::Image,
+                        HttpResponseMode::ImageMemory,
+                        context());
+    HttpRequestHandle *handle = client.send(std::move(request));
+    QSignalSpy success(handle, &HttpRequestHandle::succeeded);
+    QVERIFY(success.wait());
+
+    QCOMPARE(manager.recordedRequest()
+                 .attribute(QNetworkRequest::CacheLoadControlAttribute)
+                 .toInt(),
+             static_cast<int>(QNetworkRequest::AlwaysNetwork));
+    QCOMPARE(manager.recordedRequest()
+                 .attribute(QNetworkRequest::CacheSaveControlAttribute)
+                 .toBool(),
+             false);
+    QVERIFY(manager.cache() == nullptr);
 }
 
 void HttpClientTest::rejectsDeclaredAndChunkedOversize()

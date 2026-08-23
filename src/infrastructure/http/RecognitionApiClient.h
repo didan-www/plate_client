@@ -4,6 +4,7 @@
 #include "domain/RecognitionSnapshot.h"
 #include "domain/RequestContext.h"
 
+#include <QByteArray>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -29,6 +30,8 @@ enum class RecognitionApiErrorCode
     Timeout,
     Cancelled,
     StaleResponse,
+    ResponseTooLarge,
+    InvalidContentType,
     ProtocolError,
 };
 
@@ -98,6 +101,37 @@ private:
     bool completed_ = false;
 };
 
+class RecognitionImageRequestHandle final : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit RecognitionImageRequestHandle(RequestContext context,
+                                           QObject *parent = nullptr);
+    ~RecognitionImageRequestHandle() override;
+
+    void cancel();
+    [[nodiscard]] const RequestContext &context() const noexcept;
+    [[nodiscard]] const QByteArray &imageBytes() const noexcept;
+    [[nodiscard]] const QByteArray &declaredFormat() const noexcept;
+
+signals:
+    void succeeded();
+    void failed(const RecognitionApiError &error);
+    void finished();
+
+private:
+    friend class RecognitionApiClient;
+    void completeSuccess(QByteArray imageBytes, QByteArray declaredFormat);
+    void completeFailure(RecognitionApiError error);
+
+    RequestContext context_;
+    QPointer<HttpRequestHandle> transportHandle_;
+    QByteArray imageBytes_;
+    QByteArray declaredFormat_;
+    bool completed_ = false;
+};
+
 class RecognitionApiClient final : public QObject
 {
     Q_OBJECT
@@ -110,9 +144,14 @@ public:
 
     [[nodiscard]] RecognitionDetailRequestHandle *getDetail(
         const QString &recognitionId, quint64 sessionGeneration);
+    [[nodiscard]] RecognitionImageRequestHandle *getImage(
+        const QString &recognitionId,
+        quint64 sessionGeneration,
+        quint64 requestGeneration);
 
 private:
     [[nodiscard]] QUrl detailEndpoint(const QString &recognitionId) const;
+    [[nodiscard]] QUrl imageEndpoint(const QString &recognitionId) const;
 
     QUrl loginBaseUrl_;
     HttpClient *httpClient_;
