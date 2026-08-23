@@ -67,6 +67,13 @@ public:
                     }
                     emit failed(generation, mapClientError(error));
                 });
+        connect(client_.get(), &QMqttClient::messageReceived, this,
+                [this, generation](const QByteArray &payload,
+                                   const QMqttTopicName &topic) {
+                    if (generation == generation_) {
+                        emit messageReceived(generation, topic.name(), payload);
+                    }
+                });
 
         if (tls_) {
             tlsSocket_ = std::make_unique<QSslSocket>();
@@ -236,6 +243,8 @@ MqttRecognitionSubscriber::MqttRecognitionSubscriber(
             this, &MqttRecognitionSubscriber::handleSubscriptionSucceeded);
     connect(mqttClient_, &MqttClientInterface::subscriptionFailed,
             this, &MqttRecognitionSubscriber::handleSubscriptionFailed);
+    connect(mqttClient_, &MqttClientInterface::messageReceived,
+            this, &MqttRecognitionSubscriber::handleMessage);
     connect(sessionService_, &SessionService::sessionActivated,
             this, &MqttRecognitionSubscriber::activate);
     connect(sessionService_, &SessionService::sessionInvalidated, this,
@@ -410,6 +419,18 @@ void MqttRecognitionSubscriber::handleSubscriptionFailed(quint64 generation)
     }
     subscriptionPending_ = false;
     enterPermanentError(MqttErrorCode::SubscriptionRejected);
+}
+
+void MqttRecognitionSubscriber::handleMessage(quint64 generation,
+                                              const QString &topic,
+                                              const QByteArray &payload)
+{
+    if (!running_ || generation != sessionGeneration_
+        || state_ != MqttConnectivityState::Connected || subscriptionPending_
+        || topic != eventTopic_) {
+        return;
+    }
+    emit eventPayloadReceived(generation, payload);
 }
 
 void MqttRecognitionSubscriber::scheduleReconnect(MqttErrorCode code)

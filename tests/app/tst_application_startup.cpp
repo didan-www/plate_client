@@ -2,6 +2,7 @@
 
 #include "app/AppController.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
+#include "services/RealtimeRecognitionStore.h"
 #include "support/MockHttpServer.h"
 #include "support/MockMqttClient.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
@@ -68,6 +69,27 @@ QJsonObject sessionData()
                       {QStringLiteral("expiresAt"), expiry},
                       {QStringLiteral("eventTopic"), QStringLiteral("plate/events")}}},
     };
+}
+
+QByteArray recognitionEvent()
+{
+    return QJsonDocument(QJsonObject {
+                             {QStringLiteral("schemaVersion"), 1},
+                             {QStringLiteral("recognitionId"), QStringLiteral("rec-live")},
+                             {QStringLiteral("revision"), 1},
+                             {QStringLiteral("deviceId"), QStringLiteral("device-1")},
+                             {QStringLiteral("status"), QStringLiteral("PROCESSING")},
+                             {QStringLiteral("plateNumber"), QJsonValue::Null},
+                             {QStringLiteral("errorCode"), QJsonValue::Null},
+                             {QStringLiteral("errorMessage"), QJsonValue::Null},
+                             {QStringLiteral("capturedAt"),
+                              QStringLiteral("2026-08-12T10:00:00+08:00")},
+                             {QStringLiteral("startedAt"),
+                              QStringLiteral("2026-08-12T10:00:01+08:00")},
+                             {QStringLiteral("completedAt"), QJsonValue::Null},
+                             {QStringLiteral("durationMs"), QJsonValue::Null},
+                         })
+        .toJson(QJsonDocument::Compact);
 }
 } // namespace
 
@@ -179,6 +201,14 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     mqttClient.reportSubscriptionSucceeded(mqttClient.configuredGeneration);
     QCOMPARE(window->sidebar()->mqttStatusIndicator()->statusText(),
              QStringLiteral("已连接"));
+    mqttClient.reportMessage(mqttClient.configuredGeneration,
+                             QStringLiteral("plate/events"),
+                             recognitionEvent());
+    QTRY_COMPARE(runtime.realtimeStore()->items().size(), 1);
+    QCOMPARE(runtime.realtimeStore()->items().constFirst().recognitionId(),
+             QStringLiteral("rec-live"));
+    QCOMPARE(runtime.realtimeStore()->current()->recognitionId(),
+             QStringLiteral("rec-live"));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

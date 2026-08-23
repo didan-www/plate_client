@@ -60,6 +60,10 @@ public:
     {
         emit subscriptionFailed(generation);
     }
+    void reportMessage(quint64 generation, const QString &topic, const QByteArray &payload)
+    {
+        emit messageReceived(generation, topic, payload);
+    }
 
     int configureCount = 0;
     int connectCount = 0;

@@ -58,6 +58,16 @@ add_executable(
 )
 
 add_executable(
+    tst_recognition_event_codec
+    mqtt/tst_recognition_event_codec.cpp
+)
+
+add_executable(
+    tst_realtime_store
+    services/tst_realtime_store.cpp
+)
+
+add_executable(
     tst_login_window
     ui/tst_login_window.cpp
 )
@@ -102,6 +112,8 @@ plate_client_apply_project_options(tst_auth_api_client)
 plate_client_apply_project_options(tst_session_service)
 plate_client_apply_project_options(tst_heartbeat_service)
 plate_client_apply_project_options(tst_mqtt_subscriber)
+plate_client_apply_project_options(tst_recognition_event_codec)
+plate_client_apply_project_options(tst_realtime_store)
 plate_client_apply_project_options(tst_login_window)
 plate_client_apply_project_options(tst_main_window_shell)
 plate_client_apply_project_options(tst_http_status_indicator)
@@ -197,6 +209,20 @@ target_link_libraries(
 )
 
 target_link_libraries(
+    tst_recognition_event_codec
+    PRIVATE
+        plate_client_mqtt
+        Qt6::Test
+)
+
+target_link_libraries(
+    tst_realtime_store
+    PRIVATE
+        plate_client_realtime
+        Qt6::Test
+)
+
+target_link_libraries(
     tst_login_window
     PRIVATE
         plate_client_ui
@@ -254,6 +280,8 @@ add_test(NAME unit.auth_api_client COMMAND tst_auth_api_client)
 add_test(NAME unit.session_service COMMAND tst_session_service)
 add_test(NAME unit.heartbeat_service COMMAND tst_heartbeat_service)
 add_test(NAME unit.mqtt_subscriber COMMAND tst_mqtt_subscriber)
+add_test(NAME unit.recognition_event_codec COMMAND tst_recognition_event_codec)
+add_test(NAME unit.realtime_store COMMAND tst_realtime_store)
 add_test(NAME unit.login_window COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi100 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi150 COMMAND tst_login_window)
@@ -278,6 +306,8 @@ set_tests_properties(
     unit.session_service
     unit.heartbeat_service
     unit.mqtt_subscriber
+    unit.recognition_event_codec
+    unit.realtime_store
     unit.login_window
     unit.login_window.dpi100
     unit.login_window.dpi150

@@ -69,6 +69,14 @@ add_library(
     infrastructure/mqtt/MqttError.h
     infrastructure/mqtt/MqttRecognitionSubscriber.h
     infrastructure/mqtt/MqttRecognitionSubscriber.cpp
+    infrastructure/mqtt/RecognitionEventCodec.h
+    infrastructure/mqtt/RecognitionEventCodec.cpp
+)
+
+add_library(
+    plate_client_realtime STATIC
+    services/RealtimeRecognitionStore.h
+    services/RealtimeRecognitionStore.cpp
 )
 
 add_library(
@@ -169,9 +177,27 @@ target_link_libraries(
     plate_client_mqtt
     PUBLIC
         plate_client_auth
+        plate_client_logging
+        plate_client_protocol
         Qt6::Core
         Qt6::Network
         Qt6::Mqtt
+)
+
+plate_client_apply_project_options(plate_client_realtime)
+
+target_include_directories(
+    plate_client_realtime
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_realtime
+    PUBLIC
+        plate_client_auth
+        plate_client_protocol
+        Qt6::Core
 )
 
 plate_client_apply_project_options(plate_client_app)
@@ -191,6 +217,7 @@ target_link_libraries(
         plate_client_heartbeat
         plate_client_logging
         plate_client_mqtt
+        plate_client_realtime
         plate_client_ui
         Qt6::Widgets
 )

@@ -12,6 +12,8 @@ class HeartbeatApiClient;
 class HeartbeatService;
 class HttpClient;
 class MqttRecognitionSubscriber;
+class RecognitionEventCodec;
+class RealtimeRecognitionStore;
 class QSettings;
 class SessionService;
 class TechnicalLogger;
@@ -36,6 +38,7 @@ public:
     [[nodiscard]] bool startFromApplicationDirectory();
     [[nodiscard]] bool startFromConfigFile(const QString &filePath);
     [[nodiscard]] AppController *controller() const noexcept;
+    [[nodiscard]] RealtimeRecognitionStore *realtimeStore() const noexcept;
     [[nodiscard]] bool runtimeInitialized() const noexcept;
 
 private:
@@ -51,6 +54,8 @@ private:
     std::unique_ptr<HeartbeatApiClient> heartbeatApiClient_;
     std::unique_ptr<HeartbeatService> heartbeatService_;
     std::unique_ptr<MqttRecognitionSubscriber> mqttSubscriber_;
+    std::unique_ptr<RecognitionEventCodec> recognitionEventCodec_;
+    std::unique_ptr<RealtimeRecognitionStore> realtimeStore_;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<AppController> controller_;
 };

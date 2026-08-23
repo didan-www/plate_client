@@ -6,8 +6,10 @@
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/logging/TechnicalLogger.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
+#include "infrastructure/mqtt/RecognitionEventCodec.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
+#include "services/RealtimeRecognitionStore.h"
 #include "services/SessionService.h"
 #include "ui/widgets/NavigationSidebar.h"
 #include "ui/windows/MainWindow.h"
@@ -50,6 +52,11 @@ bool Application::startFromConfigFile(const QString &filePath)
 AppController *Application::controller() const noexcept
 {
     return controller_.get();
+}
+
+RealtimeRecognitionStore *Application::realtimeStore() const noexcept
+{
+    return realtimeStore_.get();
 }
 
 bool Application::runtimeInitialized() const noexcept
@@ -97,6 +104,18 @@ bool Application::initialize(BootstrapConfigLoadResult result)
             mqttClientId, config.allowInsecureTransport(), sessionService_.get());
     }
     Q_ASSERT(mqttSubscriber_);
+    recognitionEventCodec_ = std::make_unique<RecognitionEventCodec>(logger_.get());
+    realtimeStore_ = std::make_unique<RealtimeRecognitionStore>(sessionService_.get());
+    QObject::connect(
+        mqttSubscriber_.get(), &MqttRecognitionSubscriber::eventPayloadReceived,
+        realtimeStore_.get(),
+        [codec = recognitionEventCodec_.get(), store = realtimeStore_.get()](
+            quint64 generation, const QByteArray &payload) {
+            auto snapshot = codec->decode(payload);
+            if (snapshot) {
+                (void)store->apply(generation, std::move(*snapshot));
+            }
+        });
     settings_ = std::make_unique<QSettings>();
     AppController::WindowFactory authenticatedWindowFactory = windowFactory_;
     if (!authenticatedWindowFactory) {

@@ -2,6 +2,7 @@
 
 #include "infrastructure/mqtt/MqttError.h"
 
+#include <QByteArray>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -45,6 +46,9 @@ signals:
     void failed(quint64 sessionGeneration, MqttErrorCode code);
     void subscriptionSucceeded(quint64 sessionGeneration);
     void subscriptionFailed(quint64 sessionGeneration);
+    void messageReceived(quint64 sessionGeneration,
+                         const QString &topic,
+                         const QByteArray &payload);
 };
 
 class MqttRecognitionSubscriber final : public QObject
@@ -76,6 +80,7 @@ signals:
     void stateChanged(MqttConnectivityState state, const QString &safeReason);
     void reconnectScheduled(int delaySeconds);
     void permanentError(const MqttError &error);
+    void eventPayloadReceived(quint64 sessionGeneration, const QByteArray &payload);
 
 private:
     void activate(const SessionSummary &summary);
@@ -85,6 +90,7 @@ private:
     void handleFailure(quint64 generation, MqttErrorCode code);
     void handleSubscriptionSucceeded(quint64 generation);
     void handleSubscriptionFailed(quint64 generation);
+    void handleMessage(quint64 generation, const QString &topic, const QByteArray &payload);
     void scheduleReconnect(MqttErrorCode code);
     void enterPermanentError(MqttErrorCode code);
     void setState(MqttConnectivityState state,

@@ -41,6 +41,7 @@ private slots:
     void invalidationCancelsReconnectAndClearsCredentials();
     void newSessionResetsPermanentError();
     void staleGenerationCallbacksAreIgnored();
+    void forwardsOnlyCurrentSubscribedTopic();
 };
 
 void MqttSubscriberTest::initTestCase()
@@ -293,6 +294,42 @@ void MqttSubscriberTest::staleGenerationCallbacksAreIgnored()
     QCOMPARE(subscriber.state(), MqttConnectivityState::Reconnecting);
     client.reportSubscriptionSucceeded(newGeneration);
     QCOMPARE(subscriber.state(), MqttConnectivityState::Connected);
+}
+
+void MqttSubscriberTest::forwardsOnlyCurrentSubscribedTopic()
+{
+    SessionService sessions;
+    MockMqttClient client;
+    MqttRecognitionSubscriber subscriber(QStringLiteral("client-id"), false,
+                                         &sessions, &client, 1ms);
+    QSignalSpy events(&subscriber, &MqttRecognitionSubscriber::eventPayloadReceived);
+    QVERIFY(sessions.establishSession(session()));
+    const quint64 oldGeneration = sessions.currentGeneration();
+    const QByteArray payload = QByteArrayLiteral("{\"schemaVersion\":1}");
+
+    client.reportMessage(oldGeneration, QStringLiteral("plate/events"), payload);
+    client.reportConnected(oldGeneration);
+    client.reportMessage(oldGeneration, QStringLiteral("plate/events"), payload);
+    QCOMPARE(events.count(), 0);
+
+    client.reportSubscriptionSucceeded(oldGeneration);
+    client.reportMessage(oldGeneration, QStringLiteral("plate/other"), payload);
+    client.reportMessage(oldGeneration - 1, QStringLiteral("plate/events"), payload);
+    QCOMPARE(events.count(), 0);
+    client.reportMessage(oldGeneration, QStringLiteral("plate/events"), payload);
+    QCOMPARE(events.count(), 1);
+    QCOMPARE(events.constFirst().at(0).toULongLong(), oldGeneration);
+    QCOMPARE(events.constFirst().at(1).toByteArray(), payload);
+
+    QVERIFY(sessions.establishSession(session()));
+    const quint64 newGeneration = sessions.currentGeneration();
+    client.reportMessage(oldGeneration, QStringLiteral("plate/events"), payload);
+    client.reportMessage(newGeneration, QStringLiteral("plate/events"), payload);
+    QCOMPARE(events.count(), 1);
+    client.reportConnected(newGeneration);
+    client.reportSubscriptionSucceeded(newGeneration);
+    client.reportMessage(newGeneration, QStringLiteral("plate/events"), payload);
+    QCOMPARE(events.count(), 2);
 }
 
 QTEST_MAIN(MqttSubscriberTest)
