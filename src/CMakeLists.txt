@@ -99,6 +99,14 @@ add_library(
 )
 
 add_library(
+    plate_client_access_list STATIC
+    infrastructure/http/AccessListApiClient.h
+    infrastructure/http/AccessListApiClient.cpp
+    services/AccessListService.h
+    services/AccessListService.cpp
+)
+
+add_library(
     plate_client_ui STATIC
     ui/models/RecognitionTableModel.h
     ui/models/RecognitionTableModel.cpp
@@ -206,6 +214,23 @@ target_link_libraries(
     PUBLIC
         plate_client_auth
         plate_client_reconciliation
+        plate_client_protocol
+        Qt6::Core
+)
+
+plate_client_apply_project_options(plate_client_access_list)
+
+target_include_directories(
+    plate_client_access_list
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_access_list
+    PUBLIC
+        plate_client_auth
+        plate_client_http
         plate_client_protocol
         Qt6::Core
 )

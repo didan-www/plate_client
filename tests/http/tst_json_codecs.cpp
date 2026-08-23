@@ -292,7 +292,25 @@ void JsonCodecsTest::decodesAccessListAndPage()
 
 void JsonCodecsTest::rejectsAccessListAndPaginationLimits()
 {
+    const QString astral = QString::fromUcs4(U"\U0001F680");
     QJsonObject record = accessListData();
+    record.insert(QStringLiteral("plateNumber"), astral.repeated(16));
+    QVERIFY(JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record.insert(QStringLiteral("plateNumber"), astral.repeated(17));
+    QVERIFY(!JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record = accessListData();
+    record.insert(QStringLiteral("remark"), astral.repeated(200));
+    QVERIFY(JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record.insert(QStringLiteral("remark"), astral.repeated(201));
+    QVERIFY(!JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record = accessListData();
+    record.insert(QStringLiteral("plateNumber"),
+                  QStringLiteral("京") + QChar(0x0085) + QStringLiteral("A12345"));
+    QVERIFY(!JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record.insert(QStringLiteral("plateNumber"),
+                  QStringLiteral("京A12345") + QChar(0x3000));
+    QVERIFY(!JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
+    record = accessListData();
     record.insert(QStringLiteral("remark"), QString(201, QLatin1Char('x')));
     QVERIFY(!JsonCodecs::decodeAccessListEnvelope(compact(envelope(record))).isSuccess());
     record = accessListData();

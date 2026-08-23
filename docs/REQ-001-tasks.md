@@ -832,34 +832,47 @@ TASK-017 已验收。
 **实现内容**
 
 - 实现 `AccessListApiClient` 的分页、精确查询、POST 和 DELETE。
-- 实现 `AccessListService` 的标签、关键词、分页和请求代次管理。
-- 规范化规则为首尾去空白、英文转大写、拒绝内部空白、长度 1 至 16。
-- 新增和删除写请求串行化，不做乐观本地修改，不自动重发。
-- 写请求 10 秒超时后按规范化车牌精确查询，返回已生效、未生效或无法确认。
-- 处理 401/403/404/409，并保留服务端最终校验权。
+- 实现 `AccessListService` 的标签、关键词、分页和查询请求代次管理；查询快照固定包含 `listType/keyword/page/pageSize=100`，新查询取消旧查询，页码和返回记录类型必须与请求匹配。
+- 规范化按 Unicode 码点执行：首尾去除类别 `Zs/Zl/Zp`、U+0009 至 U+000D 和 U+0085 的空白，仅 ASCII `a-z` 转大写，拒绝内部同集合空白，车牌长度 1 至 16 个 Unicode 码点；关键词同规则但允许为空，备注最多 200 个 Unicode 码点。
+- 查询通道和写通道可并行，分别持有独立递增代次、活动句柄和不可变快照。写通道从原写延续到可能的核实结束最多一个活动操作；第二写立即 `Busy` 拒绝且不排队。
+- 新增和删除不做乐观本地修改，不自动重发。只有原写 10 秒超时才在同一写生命周期按规范化车牌执行一次精确查询；核实期间继续占用写通道。
+- 新增超时后 lookup 同名单类型为 `Applied`，404 或异名单类型为 `NotApplied`；删除超时后 lookup 404 或不同 ID 为 `Applied`，同 ID 为 `NotApplied`；核实失败为 `Unknown`。直接 DELETE 404 为 `AlreadyAbsent` 并按已生效处理。
+- 只有 `Applied/AlreadyAbsent` 后刷新当前最后提交查询；`NotApplied/Unknown/Busy` 保留原表格。显式取消、会话失效、旧响应和析构静默失效，不发布三态结果。
+- API 层保持 lookup 404 为 `NotFound`，仅 Service 核实上下文转义。处理 401/403/404/409；409 只把 `ACCESS_LIST_CONFLICT_WHITE/BLACK` 映射为稳定现有类型，未知 409 按协议错误，并保留服务端最终校验权。
+- 建立独立名单静态库；TASK-018 不创建或修改名单 UI，不向 `Application` 或 `MainWindow` 注入服务，不实施 TASK-019。
 
 **预计修改文件**
 
+- `README.md`
+- `docs/REQ-001.md`
+- `docs/REQ-001-design.md`
+- `docs/REQ-001-tasks.md`
 - `src/infrastructure/http/AccessListApiClient.h`
 - `src/infrastructure/http/AccessListApiClient.cpp`
 - `src/services/AccessListService.h`
 - `src/services/AccessListService.cpp`
+- `src/infrastructure/http/JsonCodecs.cpp`
 - `tests/http/tst_access_list_api.cpp`
 - `tests/services/tst_access_list_service.cpp`
+- `tests/http/tst_json_codecs.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
 **独立测试**
 
-- 覆盖白/黑名单、车牌包含搜索、创建时间倒序分页和精确查询 404。
-- 覆盖规范化、同名单重复、跨名单冲突和 200 字备注边界。
-- 分别模拟新增/删除超时后服务端已提交、未提交及核实失败，并验证原写请求只发送一次。
+- API 覆盖白/黑名单、车牌包含搜索、URL 编码、固定分页、页码/记录类型不匹配、精确查询 404、严格信封、401/403、两个稳定 409、未知 409、5xx、网络、TLS、超时、取消、重定向和无重试。
+- 覆盖精确 Unicode 空白集合、ASCII 大写、内部空白、Unicode 码点计数、空关键词、同名单重复、跨名单冲突和 200 Unicode 码点备注边界。
+- 验证查询和写并行且互不取消，查询/写代次及不可变快照分别拒绝旧响应；第二写返回 `Busy` 且不新增请求。
+- 分别模拟新增超时后的同类型、404、异类型和核实失败，以及删除超时后的 404、同 ID、不同 ID 和核实失败；验证原写只发送一次、核实最多一次且直接 DELETE 404 为 `AlreadyAbsent`。
+- 验证只有 `Applied/AlreadyAbsent` 刷新最后提交查询，其他结果保留分页；覆盖会话切换、401、显式取消、析构、晚到回调和信号重入删除安全。
 
 **验收标准**
 
 - 名单数据只来自 HTTP/MySQL，不创建本地业务缓存。
-- 写入结果不明时不猜测成功或失败，严格按精确查询结果提示。
+- 写入结果不明时不猜测成功或失败，严格按固定精确查询矩阵返回 `Applied/AlreadyAbsent/NotApplied/Unknown`。
 - 所有旧标签、旧关键词、旧页面和旧会话响应均不能更新当前数据。
+- 查询和唯一写操作可并行，但任何时刻不超过一个原写或核实请求；不排队、不重发原写。
+- TASK-018 的 Git diff 不包含 UI、`Application`、`MainWindow` 或 TASK-019 代码。
 
 ### TASK-019 实现黑白名单管理页面
 

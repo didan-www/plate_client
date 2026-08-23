@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QList>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -203,14 +204,50 @@ ProtocolResult<QString> stringValue(const QJsonValue &value,
     return ProtocolResult<QString>::success(text);
 }
 
+bool isUnicodeWhitespace(char32_t codePoint)
+{
+    if ((codePoint >= 0x0009U && codePoint <= 0x000DU) || codePoint == 0x0085U) {
+        return true;
+    }
+    const QChar::Category category = QChar::category(codePoint);
+    return category == QChar::Separator_Space || category == QChar::Separator_Line
+           || category == QChar::Separator_Paragraph;
+}
+
+bool isWellFormedUtf16(const QString &value)
+{
+    for (qsizetype index = 0; index < value.size(); ++index) {
+        const QChar current = value.at(index);
+        if (current.isHighSurrogate()) {
+            if (index + 1 >= value.size() || !value.at(index + 1).isLowSurrogate()) {
+                return false;
+            }
+            ++index;
+        } else if (current.isLowSurrogate()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool hasAtMostCodePoints(const QString &value, qsizetype maximum)
+{
+    return isWellFormedUtf16(value) && value.toUcs4().size() <= maximum;
+}
+
 bool isNormalizedPlate(const QString &plate)
 {
-    if (plate.size() < 1 || plate.size() > 16 || plate.trimmed() != plate) {
+    if (!isWellFormedUtf16(plate)) {
         return false;
     }
-    for (const QChar character : plate) {
-        if (character.isSpace()
-            || (character >= QLatin1Char('a') && character <= QLatin1Char('z'))) {
+    const QList<uint> codePoints = plate.toUcs4();
+    if (codePoints.isEmpty() || codePoints.size() > 16) {
+        return false;
+    }
+    for (const uint codePoint : codePoints) {
+        if (isUnicodeWhitespace(codePoint)
+            || (codePoint >= static_cast<uint>('a')
+                && codePoint <= static_cast<uint>('z'))) {
             return false;
         }
     }
@@ -219,7 +256,7 @@ bool isNormalizedPlate(const QString &plate)
 
 ProtocolResult<QString> plateValue(const QJsonValue &value, const QString &path)
 {
-    ProtocolResult<QString> result = stringValue(value, path, false, 16);
+    ProtocolResult<QString> result = stringValue(value, path, false);
     if (!result.isSuccess()) {
         return result;
     }
@@ -390,7 +427,7 @@ ProtocolResult<AccessListRecord> parseAccessList(const QJsonObject &object, cons
     if (!listTypeText.isSuccess()) return ProtocolResult<AccessListRecord>::failure(*listTypeText.error());
     if (!plate.isSuccess()) return ProtocolResult<AccessListRecord>::failure(*plate.error());
     if (!remark.isSuccess()) return ProtocolResult<AccessListRecord>::failure(*remark.error());
-    if (remark.value()->size() > 200) return ProtocolResult<AccessListRecord>::failure(
+    if (!hasAtMostCodePoints(*remark.value(), 200)) return ProtocolResult<AccessListRecord>::failure(
         error(ProtocolErrorCode::OutOfRange, path + QStringLiteral(".remark"),
               QStringLiteral("名单备注超过 200 个字符。")));
     if (!createdBy.isSuccess()) return ProtocolResult<AccessListRecord>::failure(*createdBy.error());
@@ -543,7 +580,7 @@ ProtocolResult<QByteArray> JsonCodecs::encodeAccessListCreateRequest(AccessListT
     if (!isNormalizedPlate(plateNumber)) return ProtocolResult<QByteArray>::failure(
         error(ProtocolErrorCode::InvalidValue, QStringLiteral("$.plateNumber"),
               QStringLiteral("车牌号不是规范化值。")));
-    if (remark.size() > 200) return ProtocolResult<QByteArray>::failure(
+    if (!hasAtMostCodePoints(remark, 200)) return ProtocolResult<QByteArray>::failure(
         error(ProtocolErrorCode::OutOfRange, QStringLiteral("$.remark"),
               QStringLiteral("名单备注超过 200 个字符。")));
     QString type;

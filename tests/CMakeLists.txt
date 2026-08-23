@@ -103,6 +103,20 @@ add_executable(
 )
 
 add_executable(
+    tst_access_list_api
+    http/tst_access_list_api.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
+    tst_access_list_service
+    services/tst_access_list_service.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     tst_csv_download_service
     services/tst_csv_download_service.cpp
     support/MockHttpServer.h
@@ -209,6 +223,8 @@ plate_client_apply_project_options(tst_recognition_api_image)
 plate_client_apply_project_options(tst_recognition_api_history)
 plate_client_apply_project_options(tst_recognition_api_csv)
 plate_client_apply_project_options(tst_history_service)
+plate_client_apply_project_options(tst_access_list_api)
+plate_client_apply_project_options(tst_access_list_service)
 plate_client_apply_project_options(tst_csv_download_service)
 plate_client_apply_project_options(tst_image_load_service)
 plate_client_apply_project_options(tst_image_decode_limits)
@@ -375,6 +391,26 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_access_list_api PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_access_list_api
+    PRIVATE
+        plate_client_access_list
+        Qt6::Network
+        Qt6::Test
+)
+
+target_include_directories(tst_access_list_service PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_access_list_service
+    PRIVATE
+        plate_client_access_list
+        Qt6::Network
+        Qt6::Test
+)
+
 target_include_directories(tst_csv_download_service PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(
@@ -518,6 +554,8 @@ add_test(NAME unit.recognition_api_image COMMAND tst_recognition_api_image)
 add_test(NAME unit.recognition_api_history COMMAND tst_recognition_api_history)
 add_test(NAME unit.recognition_api_csv COMMAND tst_recognition_api_csv)
 add_test(NAME unit.history_service COMMAND tst_history_service)
+add_test(NAME unit.access_list_api COMMAND tst_access_list_api)
+add_test(NAME unit.access_list_service COMMAND tst_access_list_service)
 add_test(NAME unit.csv_download_service COMMAND tst_csv_download_service)
 add_test(NAME unit.image_load_service COMMAND tst_image_load_service)
 add_test(NAME unit.image_decode_limits COMMAND tst_image_decode_limits)
@@ -563,6 +601,8 @@ set_tests_properties(
     unit.recognition_api_history
     unit.recognition_api_csv
     unit.history_service
+    unit.access_list_api
+    unit.access_list_service
     unit.csv_download_service
     unit.image_load_service
     unit.image_decode_limits
