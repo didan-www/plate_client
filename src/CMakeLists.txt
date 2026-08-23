@@ -92,6 +92,10 @@ add_library(
 
 add_library(
     plate_client_ui STATIC
+    ui/models/RecognitionTableModel.h
+    ui/models/RecognitionTableModel.cpp
+    ui/pages/RealtimePage.h
+    ui/pages/RealtimePage.cpp
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
     ui/widgets/NavigationSidebar.h
@@ -173,6 +177,8 @@ target_link_libraries(
     plate_client_ui
     PUBLIC
         plate_client_mqtt
+        plate_client_realtime
+        plate_client_reconciliation
         Qt6::Widgets
 )
 

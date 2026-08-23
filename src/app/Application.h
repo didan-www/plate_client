@@ -11,6 +11,7 @@ class AuthApiClient;
 class HeartbeatApiClient;
 class HeartbeatService;
 class HttpClient;
+class ImageLoadService;
 class MqttRecognitionSubscriber;
 class RecognitionApiClient;
 class RecognitionEventCodec;
@@ -42,6 +43,7 @@ public:
     [[nodiscard]] AppController *controller() const noexcept;
     [[nodiscard]] RealtimeRecognitionStore *realtimeStore() const noexcept;
     [[nodiscard]] ReconnectReconciler *reconnectReconciler() const noexcept;
+    [[nodiscard]] ImageLoadService *imageLoadService() const noexcept;
     [[nodiscard]] bool runtimeInitialized() const noexcept;
 
 private:
@@ -61,6 +63,7 @@ private:
     std::unique_ptr<RecognitionEventCodec> recognitionEventCodec_;
     std::unique_ptr<RealtimeRecognitionStore> realtimeStore_;
     std::unique_ptr<ReconnectReconciler> reconnectReconciler_;
+    std::unique_ptr<ImageLoadService> imageLoadService_;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<AppController> controller_;
 };

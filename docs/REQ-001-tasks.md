@@ -667,10 +667,14 @@ TASK-014 已验收。
 - 实现 `RealtimePage` 和只读 `RecognitionTableModel`。
 - 页面显示居中大标题“车牌识别系统”、当前图片、识别状态、结果、错误、识别时间和耗时。
 - 在 UI 线程将 `ImageLoadService` 返回的 `QImage` 转为 `QPixmap` 并保持宽高比显示。
+- `RecognitionTableModel` 只读映射 `RealtimeRecognitionStore::items`；`RealtimePage` 只订阅 Store 和图片服务信号，不直接解析 MQTT 或构造 HTTP 请求。
 - 无记录显示“未启动识别”，处理中显示“识别中”，最终状态显示“已识别完成”。
-- 表格显示序号、设备、车牌号、状态和时间，成功与失败均展示。
-- 新当前车辆取消旧图片请求；旧车辆完成只刷新列表，不抢占图片区。
+- 表格显示序号、设备、车牌号、状态和时间，成功与失败均展示；表格和当前记录时间统一使用 `capturedAt`，耗时使用 `durationMs`。
+- 新的当前 `PROCESSING` ID 取消旧图片系列并发起新图片；当前记录变为空时取消加载并清空图片。
+- 当前同一 ID 的最终事件只更新状态并保留图片；旧记录完成只刷新列表，不抢占当前记录或图片区。
+- 图片结果到达页面后再次核对 Store 当前 `recognitionId`，只有匹配时才在 UI 线程创建 `QPixmap`；页面销毁或会话清空时取消当前图片系列。
 - 图片失败显示占位和手动重试按钮，MQTT 最终事件仍能即时更新。
+- `Application` 持有 `ImageLoadService`，其依赖先创建且后销毁，controller/window 后创建且先销毁；默认窗口工厂把同一 Store 和图片服务注入 `MainWindow`/`RealtimePage`。
 
 **预计修改文件**
 
@@ -679,8 +683,11 @@ TASK-014 已验收。
 - `src/ui/models/RecognitionTableModel.h`
 - `src/ui/models/RecognitionTableModel.cpp`
 - `src/ui/windows/MainWindow.*`
+- `src/app/Application.h`
+- `src/app/Application.cpp`
 - `tests/ui/tst_realtime_page.cpp`
 - `tests/ui/tst_recognition_table_model.cpp`
+- `tests/app/tst_application_startup.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
@@ -689,6 +696,8 @@ TASK-014 已验收。
 - 驱动 Store 信号测试无记录、处理中、成功、失败和耗时显示。
 - 模拟图片慢于新车辆返回，验证旧图片不覆盖。
 - 模拟图片重试期间收到最终事件，验证结果更新不被阻塞。
+- 覆盖新当前 ID、同 ID 最终、旧记录最终、当前清空、晚到图片二次 ID 校验，以及 `capturedAt`/`durationMs` 映射。
+- 验证页面销毁和会话清空取消图片系列，并验证 `Application` 将同一 Store 与图片服务组合到默认 `MainWindow`/`RealtimePage` 且销毁顺序安全。
 
 **验收标准**
 

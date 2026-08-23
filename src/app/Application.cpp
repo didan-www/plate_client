@@ -10,6 +10,7 @@
 #include "infrastructure/mqtt/RecognitionEventCodec.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
+#include "services/ImageLoadService.h"
 #include "services/RealtimeRecognitionStore.h"
 #include "services/ReconnectReconciler.h"
 #include "services/SessionService.h"
@@ -64,6 +65,11 @@ RealtimeRecognitionStore *Application::realtimeStore() const noexcept
 ReconnectReconciler *Application::reconnectReconciler() const noexcept
 {
     return reconnectReconciler_.get();
+}
+
+ImageLoadService *Application::imageLoadService() const noexcept
+{
+    return imageLoadService_.get();
 }
 
 bool Application::runtimeInitialized() const noexcept
@@ -121,6 +127,8 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                                                   heartbeatService_.get(),
                                                                   realtimeStore_.get(),
                                                                   sessionService_.get());
+    imageLoadService_ = std::make_unique<ImageLoadService>(recognitionApiClient_.get(),
+                                                           sessionService_.get());
     QObject::connect(
         mqttSubscriber_.get(), &MqttRecognitionSubscriber::eventPayloadReceived,
         realtimeStore_.get(),
@@ -135,9 +143,11 @@ bool Application::initialize(BootstrapConfigLoadResult result)
     AppController::WindowFactory authenticatedWindowFactory = windowFactory_;
     if (!authenticatedWindowFactory) {
         authenticatedWindowFactory = [heartbeat = heartbeatService_.get(),
-                                      mqtt = mqttSubscriber_.get()](
-                                         const QString &displayName) {
-            auto *window = new MainWindow(displayName);
+                                       mqtt = mqttSubscriber_.get(),
+                                       realtimeStore = realtimeStore_.get(),
+                                       imageLoadService = imageLoadService_.get()](
+                                          const QString &displayName) {
+            auto *window = new MainWindow(displayName, realtimeStore, imageLoadService);
             window->sidebar()->setHttpConnectivityState(heartbeat->state());
             window->sidebar()->setMqttConnectivityState(mqtt->state(), mqtt->statusReason());
             QObject::connect(heartbeat, &HeartbeatService::stateChanged,

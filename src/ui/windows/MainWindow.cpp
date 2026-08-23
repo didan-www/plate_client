@@ -1,5 +1,6 @@
 #include "ui/windows/MainWindow.h"
 
+#include "ui/pages/RealtimePage.h"
 #include "ui/widgets/NavigationSidebar.h"
 
 #include <QApplication>
@@ -172,6 +173,14 @@ QWidget *createPageShell(const QString &objectName, const QString &title)
 } // namespace
 
 MainWindow::MainWindow(const QString &displayName, QWidget *parent)
+    : MainWindow(displayName, nullptr, nullptr, parent)
+{
+}
+
+MainWindow::MainWindow(const QString &displayName,
+                       RealtimeRecognitionStore *realtimeStore,
+                       ImageLoadService *imageLoadService,
+                       QWidget *parent)
     : QMainWindow(parent)
     , sidebar_(new NavigationSidebar(displayName,
                                      QStringLiteral(PLATE_CLIENT_VERSION),
@@ -187,8 +196,13 @@ MainWindow::MainWindow(const QString &displayName, QWidget *parent)
     resize(1280, 800);
 
     pageStack_->setObjectName(QStringLiteral("pageStack"));
-    pageStack_->addWidget(createPageShell(QStringLiteral("realtimePageShell"),
-                                          QStringLiteral("实时监控")));
+    if (realtimeStore && imageLoadService) {
+        realtimePage_ = new RealtimePage(realtimeStore, imageLoadService, pageStack_);
+        pageStack_->addWidget(realtimePage_);
+    } else {
+        pageStack_->addWidget(createPageShell(QStringLiteral("realtimePageShell"),
+                                              QStringLiteral("实时监控")));
+    }
     pageStack_->addWidget(createPageShell(QStringLiteral("historyPageShell"),
                                           QStringLiteral("日志记录")));
     pageStack_->addWidget(createPageShell(QStringLiteral("accessListPageShell"),
@@ -273,6 +287,11 @@ NavigationSidebar *MainWindow::sidebar() const noexcept
 QStackedWidget *MainWindow::pageStack() const noexcept
 {
     return pageStack_;
+}
+
+RealtimePage *MainWindow::realtimePage() const noexcept
+{
+    return realtimePage_;
 }
 
 bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)

@@ -119,6 +119,18 @@ add_executable(
 )
 
 add_executable(
+    tst_recognition_table_model
+    ui/tst_recognition_table_model.cpp
+)
+
+add_executable(
+    tst_realtime_page
+    ui/tst_realtime_page.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     plate_client_main_window_preview EXCLUDE_FROM_ALL
     ui/main_window_preview.cpp
 )
@@ -158,6 +170,8 @@ plate_client_apply_project_options(tst_reconnect_reconciler)
 plate_client_apply_project_options(tst_login_window)
 plate_client_apply_project_options(tst_main_window_shell)
 plate_client_apply_project_options(tst_http_status_indicator)
+plate_client_apply_project_options(tst_recognition_table_model)
+plate_client_apply_project_options(tst_realtime_page)
 plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
@@ -336,6 +350,23 @@ target_link_libraries(
 )
 
 target_link_libraries(
+    tst_recognition_table_model
+    PRIVATE
+        plate_client_ui
+        Qt6::Test
+)
+
+target_include_directories(tst_realtime_page PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_realtime_page
+    PRIVATE
+        plate_client_ui
+        Qt6::Network
+        Qt6::Test
+)
+
+target_link_libraries(
     plate_client_main_window_preview
     PRIVATE
         plate_client_ui
@@ -388,6 +419,11 @@ add_test(NAME unit.main_window_shell.dpi100 COMMAND tst_main_window_shell)
 add_test(NAME unit.main_window_shell.dpi150 COMMAND tst_main_window_shell)
 add_test(NAME unit.main_window_shell.dpi200 COMMAND tst_main_window_shell)
 add_test(NAME unit.http_status_indicator COMMAND tst_http_status_indicator)
+add_test(NAME unit.recognition_table_model COMMAND tst_recognition_table_model)
+add_test(NAME unit.realtime_page COMMAND tst_realtime_page)
+add_test(NAME unit.realtime_page.dpi100 COMMAND tst_realtime_page)
+add_test(NAME unit.realtime_page.dpi150 COMMAND tst_realtime_page)
+add_test(NAME unit.realtime_page.dpi200 COMMAND tst_realtime_page)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
@@ -419,6 +455,11 @@ set_tests_properties(
     unit.main_window_shell.dpi150
     unit.main_window_shell.dpi200
     unit.http_status_indicator
+    unit.recognition_table_model
+    unit.realtime_page
+    unit.realtime_page.dpi100
+    unit.realtime_page.dpi150
+    unit.realtime_page.dpi200
     unit.app_controller_login
     unit.application_startup
     app.startup
@@ -429,17 +470,20 @@ set_tests_properties(
 set_tests_properties(
     unit.login_window.dpi100
     unit.main_window_shell.dpi100
+    unit.realtime_page.dpi100
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1"
 )
 
 set_tests_properties(
     unit.login_window.dpi150
     unit.main_window_shell.dpi150
+    unit.realtime_page.dpi150
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1.5"
 )
 
 set_tests_properties(
     unit.login_window.dpi200
     unit.main_window_shell.dpi200
+    unit.realtime_page.dpi200
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=2"
 )

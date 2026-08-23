@@ -2,21 +2,29 @@
 
 #include "app/AppController.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
+#include "services/ImageLoadService.h"
 #include "services/RealtimeRecognitionStore.h"
 #include "support/MockHttpServer.h"
 #include "support/MockMqttClient.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
+#include "ui/pages/RealtimePage.h"
 #include "ui/windows/LoginWindow.h"
 #include "ui/windows/MainWindow.h"
 
+#include <QBuffer>
 #include <QFile>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QtTest>
+
+#include <memory>
 
 namespace {
 QString writeConfig(const QString &directory, const QByteArray &bytes)
@@ -50,6 +58,23 @@ MockHttpResponse jsonResponse(QByteArray body)
     return response;
 }
 
+MockHttpResponse imageResponse(int delayMs = 0)
+{
+    QImage image(QSize(40, 24), QImage::Format_ARGB32);
+    image.fill(Qt::green);
+    QByteArray bytes;
+    QBuffer buffer(&bytes);
+    if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG")) {
+        qFatal("Unable to create startup test image.");
+    }
+    MockHttpResponse response;
+    response.headers.append({QByteArrayLiteral("Content-Type"),
+                             QByteArrayLiteral("image/png")});
+    response.chunks.append(std::move(bytes));
+    response.initialDelayMs = delayMs;
+    return response;
+}
+
 QJsonObject sessionData()
 {
     const QString expiry = QDateTime::currentDateTime()
@@ -72,12 +97,13 @@ QJsonObject sessionData()
 }
 
 QByteArray recognitionEvent(qint64 revision = 1,
-                            const QString &status = QStringLiteral("PROCESSING"))
+                            const QString &status = QStringLiteral("PROCESSING"),
+                            const QString &recognitionId = QStringLiteral("rec-live"))
 {
     const bool completed = status != QStringLiteral("PROCESSING");
     return QJsonDocument(QJsonObject {
                              {QStringLiteral("schemaVersion"), 1},
-                             {QStringLiteral("recognitionId"), QStringLiteral("rec-live")},
+                             {QStringLiteral("recognitionId"), recognitionId},
                              {QStringLiteral("revision"), revision},
                              {QStringLiteral("deviceId"), QStringLiteral("device-1")},
                              {QStringLiteral("status"), status},
@@ -173,9 +199,9 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
                                            })
                                   .toJson(QJsonDocument::Compact);
     MockMqttClient mqttClient;
-    Application runtime(
+    auto runtime = std::make_unique<Application>(
         [](const QString &) { qFatal("Unexpected startup error."); },
-        {},
+        AppController::WindowFactory {},
         [&mqttClient](const QString &clientId,
                       bool allowInsecureTransport,
                       SessionService *sessions) {
@@ -186,9 +212,9 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
                 &mqttClient,
                 std::chrono::milliseconds(1));
         });
-    QVERIFY(runtime.startFromConfigFile(writeConfig(directory.path(), bytes)));
+    QVERIFY(runtime->startFromConfigFile(writeConfig(directory.path(), bytes)));
 
-    LoginWindow *login = runtime.controller()->loginWindow();
+    LoginWindow *login = runtime->controller()->loginWindow();
     login->findChild<QLineEdit *>(QStringLiteral("usernameEdit"))->setText(
         QStringLiteral("operator"));
     login->findChild<QLineEdit *>(QStringLiteral("passwordEdit"))->setText(
@@ -196,8 +222,11 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     login->findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
 
     QTRY_COMPARE(server.requests().size(), 2);
-    auto *window = qobject_cast<MainWindow *>(runtime.controller()->authenticatedWindow());
+    auto *window = qobject_cast<MainWindow *>(runtime->controller()->authenticatedWindow());
     QVERIFY(window);
+    QVERIFY(window->realtimePage());
+    QCOMPARE(window->realtimePage()->store(), runtime->realtimeStore());
+    QCOMPARE(window->realtimePage()->imageLoadService(), runtime->imageLoadService());
     QCOMPARE(server.requests().at(1).target,
              QByteArrayLiteral("/api/v1/clients/heartbeat"));
     QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
@@ -210,28 +239,62 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     mqttClient.reportSubscriptionSucceeded(mqttClient.configuredGeneration);
     QCOMPARE(window->sidebar()->mqttStatusIndicator()->statusText(),
              QStringLiteral("已连接"));
+    server.enqueueResponse(imageResponse());
     mqttClient.reportMessage(mqttClient.configuredGeneration,
                              QStringLiteral("plate/events"),
                              recognitionEvent());
-    QTRY_COMPARE(runtime.realtimeStore()->items().size(), 1);
-    QCOMPARE(runtime.realtimeStore()->items().constFirst().recognitionId(),
+    QTRY_COMPARE(runtime->realtimeStore()->items().size(), 1);
+    QCOMPARE(runtime->realtimeStore()->items().constFirst().recognitionId(),
              QStringLiteral("rec-live"));
-    QCOMPARE(runtime.realtimeStore()->current()->recognitionId(),
+    QCOMPARE(runtime->realtimeStore()->current()->recognitionId(),
              QStringLiteral("rec-live"));
-    QVERIFY(runtime.reconnectReconciler());
-    QTest::qWait(20);
-    QCOMPARE(server.requests().size(), 2);
+    QVERIFY(runtime->reconnectReconciler());
+    QTRY_COMPARE(server.requests().size(), 3);
+    QCOMPARE(server.requests().at(2).target,
+             QByteArrayLiteral("/api/v1/recognitions/rec-live/image"));
+    auto *imageLabel = window->realtimePage()->findChild<QLabel *>(
+        QStringLiteral("currentImageLabel"));
+    QVERIFY(imageLabel);
+    QTRY_VERIFY(!imageLabel->pixmap().isNull());
 
     server.enqueueResponse(jsonResponse(envelope(
         QJsonDocument::fromJson(recognitionEvent(2, QStringLiteral("SUCCEEDED"))).object())));
     mqttClient.reportDisconnected(mqttClient.configuredGeneration);
     mqttClient.reportConnected(mqttClient.configuredGeneration);
     mqttClient.reportSubscriptionSucceeded(mqttClient.configuredGeneration);
-    QTRY_COMPARE(server.requests().size(), 3);
-    QCOMPARE(server.requests().at(2).target,
+    QTRY_COMPARE(server.requests().size(), 4);
+    QCOMPARE(server.requests().at(3).target,
              QByteArrayLiteral("/api/v1/recognitions/rec-live"));
-    QTRY_COMPARE(runtime.realtimeStore()->current()->revision(), qint64(2));
-    QCOMPARE(runtime.realtimeStore()->current()->status(), RecognitionStatus::Succeeded);
+    QTRY_COMPARE(runtime->realtimeStore()->current()->revision(), qint64(2));
+    QCOMPARE(runtime->realtimeStore()->current()->status(), RecognitionStatus::Succeeded);
+    QCOMPARE(window->realtimePage()
+                 ->findChild<QLabel *>(QStringLiteral("currentStatusLabel"))
+                 ->text(),
+             QStringLiteral("已识别完成"));
+
+    server.enqueueResponse(imageResponse(200));
+    mqttClient.reportMessage(mqttClient.configuredGeneration,
+                             QStringLiteral("plate/events"),
+                             recognitionEvent(1,
+                                              QStringLiteral("PROCESSING"),
+                                              QStringLiteral("rec-destroy")));
+    QTRY_COMPARE(server.requests().size(), 5);
+    QCOMPARE(server.requests().at(4).target,
+             QByteArrayLiteral("/api/v1/recognitions/rec-destroy/image"));
+    QTRY_VERIFY(runtime->imageLoadService()->requestInFlight());
+
+    QStringList destructionOrder;
+    QPointer<MainWindow> guardedWindow(window);
+    QPointer<ImageLoadService> guardedImages(runtime->imageLoadService());
+    connect(window, &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("window")); });
+    connect(runtime->imageLoadService(), &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("images")); });
+    runtime.reset();
+    QVERIFY(guardedWindow.isNull());
+    QVERIFY(guardedImages.isNull());
+    QCOMPARE(destructionOrder,
+             QStringList({QStringLiteral("window"), QStringLiteral("images")}));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

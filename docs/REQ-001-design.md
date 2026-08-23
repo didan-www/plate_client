@@ -75,6 +75,8 @@ flowchart TB
 
 TASK-008 的认证后窗口由 `AppController::WindowFactory` 注入；默认工厂仅创建不含导航、状态或页面的最小承接窗口。TASK-009 将默认工厂替换为正式 `MainWindow`，登录控制流程和窗口工厂契约保持不变。
 
+TASK-015 由 `Application` 持有 `ImageLoadService`。成员和对象生命周期按“图片服务依赖 → `ImageLoadService` → controller/window”建立，销毁时反向执行，确保窗口和 `RealtimePage` 先断开并销毁，图片服务随后取消请求，最后才释放其 HTTP、会话等依赖。默认窗口工厂把同一 `RealtimeRecognitionStore` 和 `ImageLoadService` 注入 `MainWindow`，再由 `MainWindow` 注入 `RealtimePage`，页面不得自行创建业务服务。
+
 ### 5.2 会话和连接
 
 | 模块 | 职责 |
@@ -118,6 +120,8 @@ TASK-008 的认证后窗口由 `AppController::WindowFactory` 注入；默认工
 | `AccessListPage` | 黑白名单标签、搜索、分页、新增和删除 |
 | `RecognitionTableModel` | 实时或历史只读表格模型 |
 | `AccessListTableModel` | 名单只读表格模型 |
+
+`RealtimePage` 只订阅 `RealtimeRecognitionStore` 和 `ImageLoadService` 的信号，不解析 MQTT、不构造 HTTP 请求，也不复制业务状态机。`RecognitionTableModel` 只读映射 Store 的 `items`，不维护独立业务副本；图片服务返回的 `QImage` 仅在 `RealtimePage` 所在线程再次核对当前记录后转换为 `QPixmap`。
 
 `LoginWindow` 固定为 `520×420` 逻辑尺寸，使用 `44px`、`#1F5F99` 的 Qt 自绘标题栏并提供拖动、最小化和关闭，不提供最大化或缩放。主体使用浅灰背景；Logo 标题组合居中，用户名和密码行按图标、左对齐标签、输入框三列对齐，登录按钮固定为 `220×48` 并靠近底部。错误提示预留稳定区域，不得引起按钮位移。
 
@@ -403,6 +407,14 @@ sequenceDiagram
         R-->>P: "只更新表格"
     end
 ```
+
+实时页面按以下规则组合 Store 和图片服务：
+
+- 新的当前 `PROCESSING` 且 `recognitionId` 变化时，取消上一图片系列并按新 ID 发起图片加载；当前记录变为空时取消加载并清空图片。
+- 当前同一 ID 到达 `SUCCEEDED` 或 `FAILED` 时，只更新状态、结果、错误和耗时并保留已显示图片；旧记录的最终事件只更新只读表格，不抢占当前记录或图片区。
+- 图片结果送达页面后再次核对 Store 当前 `recognitionId`，只有匹配时才在 UI 线程创建 `QPixmap` 并显示；不匹配结果直接丢弃。
+- 当前记录和表格的时间都显示 `capturedAt`，耗时显示最终快照的 `durationMs`；无记录时显示“未启动识别”并清空图片。
+- `RealtimePage` 销毁或登录会话清空时取消当前图片系列；MQTT 最终事件和表格更新不等待图片下载、重试或解码完成。
 
 ## 12. 图片加载设计
 

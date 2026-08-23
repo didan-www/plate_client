@@ -3,9 +3,12 @@
 #include <QMainWindow>
 
 class QByteArray;
+class ImageLoadService;
 class NavigationSidebar;
 class QShowEvent;
 class QStackedWidget;
+class RealtimePage;
+class RealtimeRecognitionStore;
 
 class MainWindow final : public QMainWindow
 {
@@ -13,9 +16,14 @@ class MainWindow final : public QMainWindow
 
 public:
     explicit MainWindow(const QString &displayName, QWidget *parent = nullptr);
+    MainWindow(const QString &displayName,
+               RealtimeRecognitionStore *realtimeStore,
+               ImageLoadService *imageLoadService,
+               QWidget *parent = nullptr);
 
     [[nodiscard]] NavigationSidebar *sidebar() const noexcept;
     [[nodiscard]] QStackedWidget *pageStack() const noexcept;
+    [[nodiscard]] RealtimePage *realtimePage() const noexcept;
 
 signals:
     void logoutRequested();
@@ -27,5 +35,6 @@ protected:
 private:
     NavigationSidebar *sidebar_;
     QStackedWidget *pageStack_;
+    RealtimePage *realtimePage_ = nullptr;
     bool firstShow_ = true;
 };
