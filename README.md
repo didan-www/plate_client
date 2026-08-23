@@ -112,13 +112,15 @@ plate_client/
 
 ```json
 {
-  "clientId": "00000000-0000-0000-0000-000000000000",
-  "loginBaseUrl": "https://127.0.0.1:8443",
-  "allowInsecureTransport": false
+  "clientId": "28ab84b4-07c9-4978-a7b3-2f79e79957f2",
+  "loginBaseUrl": "http://192.168.137.128:8080",
+  "allowInsecureTransport": true
 }
 ```
 
-配置文件只允许示例中的三个字段，不得包含用户名、密码、访问令牌、MQTT 密码或其他未知字段。`loginBaseUrl` 可包含路径前缀，但不得包含查询参数、片段或用户信息。`allowInsecureTransport` 默认必须为 `false`；任何模式都不得静默忽略 TLS 证书错误。
+以上是连接当前教学虚拟机的联调配置。`clientId` 必须是非零 UUID，并且每个 Qt 客户端安装必须生成和固化自己的唯一值；复制项目或同时运行第二个客户端时必须替换示例 UUID，否则登录会使同一 Client ID 的旧 HTTP 会话失效，MQTT 客户端也会互相断开。`192.168.137.128` 只适用于当前虚拟机，服务端地址变化时同步替换。
+
+配置文件只允许示例中的三个字段，不得包含用户名、密码、访问令牌、MQTT 密码或其他未知字段。`loginBaseUrl` 可包含路径前缀，但不得包含查询参数、片段或用户信息。`allowInsecureTransport` 默认必须为 `false`；示例设置为 `true` 仅用于当前隔离教学网络，任何模式都不得静默忽略 TLS 证书错误。
 
 ## 本地数据边界
 
