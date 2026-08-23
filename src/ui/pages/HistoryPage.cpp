@@ -1,10 +1,12 @@
 #include "ui/pages/HistoryPage.h"
 
+#include "services/CsvDownloadService.h"
 #include "services/HistoryService.h"
 #include "ui/models/RecognitionTableModel.h"
 
 #include <QAbstractItemView>
 #include <QDateTimeEdit>
+#include <QFileDialog>
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QHideEvent>
@@ -16,9 +18,45 @@
 #include <QTimeZone>
 #include <QVBoxLayout>
 
+#include <utility>
+
+namespace {
+QString selectExportPath(QWidget *parent, const QString &defaultFileName)
+{
+    QFileDialog dialog(parent, QStringLiteral("导出 CSV"));
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setNameFilter(QStringLiteral("CSV 文件 (*.csv)"));
+    dialog.setDefaultSuffix(QStringLiteral("csv"));
+    dialog.selectFile(defaultFileName);
+    if (dialog.exec() != QDialog::Accepted || dialog.selectedFiles().isEmpty()) {
+        return {};
+    }
+    return dialog.selectedFiles().constFirst();
+}
+
+QString defaultExportFileName()
+{
+    const QString timestamp = QDateTime::currentDateTimeUtc()
+                                  .toOffsetFromUtc(8 * 60 * 60)
+                                  .toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    return QStringLiteral("车牌识别记录_%1.csv").arg(timestamp);
+}
+} // namespace
+
 HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
+    : HistoryPage(historyService, nullptr, {}, parent)
+{
+}
+
+HistoryPage::HistoryPage(HistoryService *historyService,
+                         CsvDownloadService *csvDownloadService,
+                         SavePathSelector savePathSelector,
+                         QWidget *parent)
     : QWidget(parent)
     , historyService_(historyService)
+    , csvDownloadService_(csvDownloadService)
+    , savePathSelector_(savePathSelector ? std::move(savePathSelector) : selectExportPath)
     , tableModel_(new RecognitionTableModel(historyService, this))
     , startTimeEdit_(new QDateTimeEdit(this))
     , endTimeEdit_(new QDateTimeEdit(this))
@@ -40,6 +78,20 @@ HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
     auto *title = new QLabel(QStringLiteral("日志记录"), this);
     title->setObjectName(QStringLiteral("historyTitleLabel"));
     title->setFixedHeight(38);
+
+    auto *headerLayout = new QHBoxLayout;
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->addWidget(title);
+    headerLayout->addStretch();
+    if (csvDownloadService_) {
+        exportStatusLabel_ = new QLabel(this);
+        exportStatusLabel_->setObjectName(QStringLiteral("historyExportStatusLabel"));
+        exportButton_ = new QPushButton(QStringLiteral("导出 CSV"), this);
+        exportButton_->setObjectName(QStringLiteral("historyExportButton"));
+        exportButton_->setFixedWidth(108);
+        headerLayout->addWidget(exportStatusLabel_);
+        headerLayout->addWidget(exportButton_);
+    }
 
     startTimeEdit_->setObjectName(QStringLiteral("historyStartTimeEdit"));
     endTimeEdit_->setObjectName(QStringLiteral("historyEndTimeEdit"));
@@ -113,7 +165,7 @@ HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
     auto *root = new QVBoxLayout(this);
     root->setContentsMargins(28, 20, 28, 24);
     root->setSpacing(12);
-    root->addWidget(title);
+    root->addLayout(headerLayout);
     root->addWidget(filterPanel);
     root->addWidget(loadingLabel_);
     root->addWidget(errorLabel_);
@@ -128,11 +180,23 @@ HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
     connect(nextButton_, &QPushButton::clicked,
             historyService_, &HistoryService::nextPage);
     connect(historyService_, &HistoryService::resultsChanged,
-            this, &HistoryPage::updatePagination);
+            this, [this] {
+                updatePagination();
+                updateExportState();
+            });
     connect(historyService_, &HistoryService::loadingChanged,
             this, &HistoryPage::updateLoading);
     connect(historyService_, &HistoryService::queryFailed,
             this, &HistoryPage::showError);
+    if (csvDownloadService_) {
+        connect(exportButton_, &QPushButton::clicked, this, &HistoryPage::exportCsv);
+        connect(csvDownloadService_, &CsvDownloadService::downloadingChanged,
+                this, &HistoryPage::updateDownloading);
+        connect(csvDownloadService_, &CsvDownloadService::downloadSucceeded,
+                this, &HistoryPage::showExportSuccess);
+        connect(csvDownloadService_, &CsvDownloadService::downloadFailed,
+                this, &HistoryPage::showError);
+    }
 
     setStyleSheet(QStringLiteral(R"(
         QWidget#historyPage { background: #F4F6F8; }
@@ -147,8 +211,10 @@ HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
             border-radius: 4px;
         }
         QLabel#historyLoadingLabel { color: #1F5F99; }
+        QLabel#historyExportStatusLabel { color: #1F5F99; }
         QLabel#historyErrorLabel { color: #B42318; }
         QPushButton#historySearchButton,
+        QPushButton#historyExportButton,
         QPushButton#historyPreviousButton,
         QPushButton#historyNextButton {
             color: #FFFFFF;
@@ -186,6 +252,7 @@ HistoryPage::HistoryPage(HistoryService *historyService, QWidget *parent)
     applyDefaultFilter();
     updateLoading(historyService_->isLoading());
     updatePagination();
+    updateExportState();
 }
 
 HistoryPage::~HistoryPage()
@@ -196,6 +263,11 @@ HistoryPage::~HistoryPage()
 HistoryService *HistoryPage::historyService() const noexcept
 {
     return historyService_;
+}
+
+CsvDownloadService *HistoryPage::csvDownloadService() const noexcept
+{
+    return csvDownloadService_;
 }
 
 RecognitionTableModel *HistoryPage::tableModel() const noexcept
@@ -240,12 +312,48 @@ void HistoryPage::reset()
     }
 }
 
+void HistoryPage::exportCsv()
+{
+    if (!csvDownloadService_ || csvDownloadService_->isDownloading()
+        || !historyService_->lastSubmittedFilter()) {
+        return;
+    }
+    const QString targetPath = savePathSelector_(this, defaultExportFileName());
+    if (targetPath.isEmpty()) {
+        return;
+    }
+    errorLabel_->clear();
+    exportStatusLabel_->clear();
+    if (!csvDownloadService_->download(*historyService_->lastSubmittedFilter(),
+                                       targetPath)) {
+        showError(QStringLiteral("CSV 导出无法启动。"));
+    }
+}
+
 void HistoryPage::updateLoading(bool loading)
 {
     if (loading) {
         errorLabel_->clear();
     }
     loadingLabel_->setText(loading ? QStringLiteral("正在查询...") : QString());
+    updateExportState();
+}
+
+void HistoryPage::updateDownloading(bool downloading)
+{
+    if (exportStatusLabel_) {
+        exportStatusLabel_->setText(downloading ? QStringLiteral("正在导出...") : QString());
+    }
+    updateExportState();
+}
+
+void HistoryPage::showExportSuccess(const QString &targetPath)
+{
+    Q_UNUSED(targetPath)
+    errorLabel_->clear();
+    if (exportStatusLabel_) {
+        exportStatusLabel_->setText(QStringLiteral("CSV 已保存。"));
+    }
 }
 
 void HistoryPage::showError(const QString &message)
@@ -260,6 +368,15 @@ void HistoryPage::updatePagination()
     pageLabel_->setText(QStringLiteral("第 %1 页").arg(page ? page->page() : 1));
     previousButton_->setEnabled(historyService_->canGoPrevious());
     nextButton_->setEnabled(historyService_->canGoNext());
+}
+
+void HistoryPage::updateExportState()
+{
+    if (!exportButton_) {
+        return;
+    }
+    exportButton_->setEnabled(historyService_->lastSubmittedFilter().has_value()
+                              && !csvDownloadService_->isDownloading());
 }
 
 void HistoryPage::applyDefaultFilter()

@@ -94,6 +94,8 @@ add_library(
     plate_client_history STATIC
     services/HistoryService.h
     services/HistoryService.cpp
+    services/CsvDownloadService.h
+    services/CsvDownloadService.cpp
 )
 
 add_library(

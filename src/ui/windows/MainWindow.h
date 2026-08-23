@@ -3,6 +3,7 @@
 #include <QMainWindow>
 
 class QByteArray;
+class CsvDownloadService;
 class ImageLoadService;
 class HistoryPage;
 class HistoryService;
@@ -26,6 +27,12 @@ public:
                RealtimeRecognitionStore *realtimeStore,
                ImageLoadService *imageLoadService,
                HistoryService *historyService,
+               QWidget *parent = nullptr);
+    MainWindow(const QString &displayName,
+               RealtimeRecognitionStore *realtimeStore,
+               ImageLoadService *imageLoadService,
+               HistoryService *historyService,
+               CsvDownloadService *csvDownloadService,
                QWidget *parent = nullptr);
 
     [[nodiscard]] NavigationSidebar *sidebar() const noexcept;

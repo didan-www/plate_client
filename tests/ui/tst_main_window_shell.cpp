@@ -2,6 +2,7 @@
 
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/http/RecognitionApiClient.h"
+#include "services/CsvDownloadService.h"
 #include "services/HistoryService.h"
 #include "services/SessionService.h"
 #include "ui/pages/HistoryPage.h"
@@ -39,6 +40,7 @@ private slots:
     void sidebarRendersConfiguredDarkBackground();
     void navigationOrderDisabledItemsAndPageMapping();
     void injectedHistoryServiceReplacesOnlyHistoryShell();
+    void injectedCsvServiceEnablesHistoryExport();
     void showsIdentityIndependentStatusesAndBuildInformation();
     void logoutButtonEmitsInteractionSignal();
     void firstShowIsMaximized();
@@ -96,6 +98,30 @@ void MainWindowShellTest::injectedHistoryServiceReplacesOnlyHistoryShell()
              QStringLiteral("realtimePageShell"));
     QCOMPARE(window.pageStack()->widget(NavigationSidebar::AccessListPage)->objectName(),
              QStringLiteral("accessListPageShell"));
+}
+
+void MainWindowShellTest::injectedCsvServiceEnablesHistoryExport()
+{
+    SessionService sessions;
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    RecognitionApiClient api(QUrl(QStringLiteral("https://example.test")),
+                             &transport,
+                             &sessions);
+    HistoryService history(&api, &sessions);
+    CsvDownloadService csv(&api, &sessions);
+    MainWindow window(QStringLiteral("测试操作员"),
+                      nullptr,
+                      nullptr,
+                      &history,
+                      &csv);
+
+    QVERIFY(window.historyPage());
+    QCOMPARE(window.historyPage()->historyService(), &history);
+    QCOMPARE(window.historyPage()->csvDownloadService(), &csv);
+    QVERIFY(window.historyPage()->findChild<QPushButton *>(
+        QStringLiteral("historyExportButton")));
 }
 
 void MainWindowShellTest::titleBarProvidesWindowControls()

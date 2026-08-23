@@ -10,6 +10,7 @@
 #include "infrastructure/mqtt/RecognitionEventCodec.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
+#include "services/CsvDownloadService.h"
 #include "services/ImageLoadService.h"
 #include "services/HistoryService.h"
 #include "services/RealtimeRecognitionStore.h"
@@ -78,6 +79,11 @@ HistoryService *Application::historyService() const noexcept
     return historyService_.get();
 }
 
+CsvDownloadService *Application::csvDownloadService() const noexcept
+{
+    return csvDownloadService_.get();
+}
+
 bool Application::runtimeInitialized() const noexcept
 {
     return controller_ != nullptr;
@@ -137,6 +143,8 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                                            sessionService_.get());
     historyService_ = std::make_unique<HistoryService>(recognitionApiClient_.get(),
                                                        sessionService_.get());
+    csvDownloadService_ = std::make_unique<CsvDownloadService>(recognitionApiClient_.get(),
+                                                               sessionService_.get());
     QObject::connect(
         mqttSubscriber_.get(), &MqttRecognitionSubscriber::eventPayloadReceived,
         realtimeStore_.get(),
@@ -154,12 +162,14 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                        mqtt = mqttSubscriber_.get(),
                                        realtimeStore = realtimeStore_.get(),
                                        imageLoadService = imageLoadService_.get(),
-                                       historyService = historyService_.get()](
+                                       historyService = historyService_.get(),
+                                       csvDownloadService = csvDownloadService_.get()](
                                           const QString &displayName) {
             auto *window = new MainWindow(displayName,
                                           realtimeStore,
                                           imageLoadService,
-                                          historyService);
+                                          historyService,
+                                          csvDownloadService);
             window->sidebar()->setHttpConnectivityState(heartbeat->state());
             window->sidebar()->setMqttConnectivityState(mqtt->state(), mqtt->statusReason());
             QObject::connect(heartbeat, &HeartbeatService::stateChanged,

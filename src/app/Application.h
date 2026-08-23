@@ -8,6 +8,7 @@
 #include <memory>
 
 class AuthApiClient;
+class CsvDownloadService;
 class HeartbeatApiClient;
 class HeartbeatService;
 class HistoryService;
@@ -46,6 +47,7 @@ public:
     [[nodiscard]] ReconnectReconciler *reconnectReconciler() const noexcept;
     [[nodiscard]] ImageLoadService *imageLoadService() const noexcept;
     [[nodiscard]] HistoryService *historyService() const noexcept;
+    [[nodiscard]] CsvDownloadService *csvDownloadService() const noexcept;
     [[nodiscard]] bool runtimeInitialized() const noexcept;
 
 private:
@@ -67,6 +69,7 @@ private:
     std::unique_ptr<ReconnectReconciler> reconnectReconciler_;
     std::unique_ptr<ImageLoadService> imageLoadService_;
     std::unique_ptr<HistoryService> historyService_;
+    std::unique_ptr<CsvDownloadService> csvDownloadService_;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<AppController> controller_;
 };

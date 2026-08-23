@@ -1,5 +1,6 @@
 #include "ui/windows/MainWindow.h"
 
+#include "services/CsvDownloadService.h"
 #include "ui/pages/RealtimePage.h"
 #include "ui/pages/HistoryPage.h"
 #include "ui/widgets/NavigationSidebar.h"
@@ -191,6 +192,21 @@ MainWindow::MainWindow(const QString &displayName,
                        ImageLoadService *imageLoadService,
                        HistoryService *historyService,
                        QWidget *parent)
+    : MainWindow(displayName,
+                 realtimeStore,
+                 imageLoadService,
+                 historyService,
+                 nullptr,
+                 parent)
+{
+}
+
+MainWindow::MainWindow(const QString &displayName,
+                       RealtimeRecognitionStore *realtimeStore,
+                       ImageLoadService *imageLoadService,
+                       HistoryService *historyService,
+                       CsvDownloadService *csvDownloadService,
+                       QWidget *parent)
     : QMainWindow(parent)
     , sidebar_(new NavigationSidebar(displayName,
                                      QStringLiteral(PLATE_CLIENT_VERSION),
@@ -214,7 +230,12 @@ MainWindow::MainWindow(const QString &displayName,
                                               QStringLiteral("实时监控")));
     }
     if (historyService) {
-        historyPage_ = new HistoryPage(historyService, pageStack_);
+        historyPage_ = csvDownloadService
+                           ? new HistoryPage(historyService,
+                                             csvDownloadService,
+                                             {},
+                                             pageStack_)
+                           : new HistoryPage(historyService, pageStack_);
         pageStack_->addWidget(historyPage_);
     } else {
         pageStack_->addWidget(createPageShell(QStringLiteral("historyPageShell"),

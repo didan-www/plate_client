@@ -123,6 +123,51 @@ std::optional<QByteArray> declaredImageFormat(const HttpResponse &response)
     return std::nullopt;
 }
 
+QByteArray csvPrefix()
+{
+    return QByteArray::fromHex("EFBBBF")
+           + QStringLiteral("记录ID,设备,车牌号,状态,错误码,错误信息,拍摄时间,开始时间,完成时间,耗时(ms)\r\n")
+                 .toUtf8();
+}
+
+bool hasValidCsvContentType(const HttpResponse &response)
+{
+    std::optional<QByteArray> value;
+    for (const auto &header : response.headers()) {
+        if (header.first.trimmed().compare(QByteArrayLiteral("Content-Type"),
+                                           Qt::CaseInsensitive)
+            != 0) {
+            continue;
+        }
+        if (value.has_value()) {
+            return false;
+        }
+        value = header.second;
+    }
+    if (!value.has_value()) {
+        return false;
+    }
+
+    const QList<QByteArray> parts = value->split(';');
+    if (parts.size() != 2
+        || parts.at(0).trimmed().compare(QByteArrayLiteral("text/csv"),
+                                         Qt::CaseInsensitive)
+               != 0) {
+        return false;
+    }
+    const QByteArray parameter = parts.at(1).trimmed();
+    const qsizetype equals = parameter.indexOf('=');
+    if (equals <= 0 || equals != parameter.lastIndexOf('=')) {
+        return false;
+    }
+    return parameter.left(equals).trimmed().compare(QByteArrayLiteral("charset"),
+                                                     Qt::CaseInsensitive)
+               == 0
+           && parameter.mid(equals + 1).trimmed().compare(QByteArrayLiteral("utf-8"),
+                                                          Qt::CaseInsensitive)
+                  == 0;
+}
+
 QString historyTime(const QDateTime &value)
 {
     return value.toOffsetFromUtc(8 * 60 * 60)
@@ -406,6 +451,107 @@ void RecognitionHistoryRequestHandle::completeFailure(RecognitionApiError error)
     }
 }
 
+RecognitionCsvRequestHandle::RecognitionCsvRequestHandle(RequestContext context,
+                                                         QObject *parent)
+    : QObject(parent)
+    , context_(std::move(context))
+{
+}
+
+RecognitionCsvRequestHandle::~RecognitionCsvRequestHandle()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+void RecognitionCsvRequestHandle::cancel()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+const RequestContext &RecognitionCsvRequestHandle::context() const noexcept
+{
+    return context_;
+}
+
+void RecognitionCsvRequestHandle::consumeChunk(const QByteArray &chunk)
+{
+    if (completed_ || chunk.isEmpty()) {
+        return;
+    }
+    if (prefixValidated_) {
+        emit dataChunkReceived(chunk);
+        return;
+    }
+
+    const QByteArray expected = csvPrefix();
+    const qsizetype needed = expected.size() - pendingPrefix_.size();
+    const qsizetype prefixBytes = std::min(chunk.size(), needed);
+    pendingPrefix_.append(chunk.constData(), prefixBytes);
+    if (pendingPrefix_ != expected.left(pendingPrefix_.size())) {
+        QPointer<HttpRequestHandle> transport = transportHandle_;
+        completeFailure(RecognitionApiError(
+            RecognitionApiErrorCode::ProtocolError,
+            QStringLiteral("CSV 响应 BOM 或固定表头无效。"),
+            {},
+            {},
+            std::nullopt,
+            ProtocolError(ProtocolErrorCode::InvalidValue,
+                          QStringLiteral("$csv.header"),
+                          QStringLiteral("CSV 必须包含 UTF-8 BOM、固定表头和 CRLF。"))));
+        if (transport) {
+            transport->cancel();
+        }
+        return;
+    }
+    if (pendingPrefix_.size() != expected.size()) {
+        return;
+    }
+
+    prefixValidated_ = true;
+    QByteArray prefix;
+    prefix.swap(pendingPrefix_);
+    const QByteArray remainder = chunk.mid(prefixBytes);
+    QPointer<RecognitionCsvRequestHandle> guarded(this);
+    emit dataChunkReceived(prefix);
+    if (!guarded || guarded->completed_) {
+        return;
+    }
+    if (!remainder.isEmpty()) {
+        emit guarded->dataChunkReceived(remainder);
+    }
+}
+
+void RecognitionCsvRequestHandle::completeSuccess()
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    QPointer<RecognitionCsvRequestHandle> guarded(this);
+    emit succeeded();
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
+void RecognitionCsvRequestHandle::completeFailure(RecognitionApiError error)
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    pendingPrefix_.clear();
+    QPointer<RecognitionCsvRequestHandle> guarded(this);
+    emit failed(error);
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
 RecognitionImageRequestHandle *RecognitionApiClient::getImage(
     const QString &recognitionId,
     quint64 sessionGeneration,
@@ -579,6 +725,101 @@ RecognitionHistoryRequestHandle *RecognitionApiClient::getHistory(
     return handle;
 }
 
+RecognitionCsvRequestHandle *RecognitionApiClient::exportCsv(
+    const QDateTime &startTime,
+    const QDateTime &endTime,
+    const QString &deviceId,
+    quint64 sessionGeneration,
+    quint64 requestGeneration)
+{
+    const QString normalizedStart = historyTime(startTime);
+    const QString normalizedEnd = historyTime(endTime);
+    const QString normalizedDevice = deviceId.trimmed();
+    QVariantMap filterSnapshot {
+        {QStringLiteral("startTime"), normalizedStart},
+        {QStringLiteral("endTime"), normalizedEnd},
+        {QStringLiteral("deviceId"), normalizedDevice},
+    };
+    const RequestContext context(sessionGeneration,
+                                 requestGeneration,
+                                 QStringLiteral("recognition.export"),
+                                 std::nullopt,
+                                 std::move(filterSnapshot));
+    auto *handle = new RecognitionCsvRequestHandle(context, this);
+    connect(handle, &RecognitionCsvRequestHandle::finished, handle, &QObject::deleteLater);
+
+    QString accessToken;
+    const bool hasToken = sessionService_->withAccessToken(
+        sessionGeneration,
+        [&accessToken](const QString &token) { accessToken = token; });
+    const bool invalidRequest = !startTime.isValid() || !endTime.isValid()
+                                || startTime >= endTime || sessionGeneration == 0
+                                || requestGeneration == 0;
+    if (invalidRequest || !hasToken) {
+        QTimer::singleShot(0, handle, [handle, invalidRequest] {
+            handle->completeFailure(RecognitionApiError(
+                invalidRequest ? RecognitionApiErrorCode::InvalidRequest
+                               : RecognitionApiErrorCode::StaleResponse,
+                invalidRequest ? QStringLiteral("CSV 导出条件无效。")
+                               : QStringLiteral("CSV 导出会话已经失效。")));
+        });
+        return handle;
+    }
+
+    HttpRequest request(HttpMethod::Get,
+                        exportEndpoint(normalizedStart, normalizedEnd, normalizedDevice),
+                        HttpRequestKind::Csv,
+                        HttpResponseMode::CsvStream,
+                        context,
+                        {},
+                        std::move(accessToken));
+    HttpRequestHandle *transport = httpClient_->send(std::move(request));
+    handle->transportHandle_ = transport;
+    connect(transport, &HttpRequestHandle::dataChunkReceived,
+            handle, &RecognitionCsvRequestHandle::consumeChunk);
+    connect(transport, &HttpRequestHandle::succeeded, handle,
+            [handle](const HttpResponse &response) {
+                if (handle->completed_) {
+                    return;
+                }
+                if (!hasValidCsvContentType(response)) {
+                    handle->completeFailure(RecognitionApiError(
+                        RecognitionApiErrorCode::InvalidContentType,
+                        QStringLiteral("CSV 响应 Content-Type 无效。"),
+                        {},
+                        {},
+                        response.statusCode()));
+                    return;
+                }
+                if (!handle->prefixValidated_) {
+                    handle->completeFailure(RecognitionApiError(
+                        RecognitionApiErrorCode::ProtocolError,
+                        QStringLiteral("CSV 响应缺少完整 BOM 或固定表头。"),
+                        {},
+                        {},
+                        response.statusCode(),
+                        ProtocolError(ProtocolErrorCode::InvalidValue,
+                                      QStringLiteral("$csv.header"),
+                                      QStringLiteral("CSV 必须包含 UTF-8 BOM、固定表头和 CRLF。"))));
+                    return;
+                }
+                handle->completeSuccess();
+            });
+    connect(transport, &HttpRequestHandle::failed, handle,
+            [this, handle](const HttpError &error, const HttpResponse &response) {
+                if (handle->completed_) {
+                    return;
+                }
+                if (error.httpStatus() == 401) {
+                    sessionService_->handleUnauthorized(
+                        response.context().sessionGeneration());
+                }
+                handle->completeFailure(mapTransportFailure(
+                    error, response, QStringLiteral("CSV 导出")));
+            });
+    return handle;
+}
+
 QUrl RecognitionApiClient::detailEndpoint(const QString &recognitionId) const
 {
     QUrl result = loginBaseUrl_;
@@ -625,6 +866,26 @@ QUrl RecognitionApiClient::historyEndpoint(const QString &startTime,
     }
     query.addQueryItem(QStringLiteral("page"), QString::number(page));
     query.addQueryItem(QStringLiteral("pageSize"), QStringLiteral("100"));
+    result.setQuery(query);
+    return result;
+}
+
+QUrl RecognitionApiClient::exportEndpoint(const QString &startTime,
+                                          const QString &endTime,
+                                          const QString &deviceId) const
+{
+    QUrl result = loginBaseUrl_;
+    QString prefix = result.path();
+    if (prefix.endsWith(QLatin1Char('/'))) {
+        prefix.chop(1);
+    }
+    result.setPath(prefix + QStringLiteral("/api/v1/recognitions/export"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("startTime"), startTime);
+    query.addQueryItem(QStringLiteral("endTime"), endTime);
+    if (!deviceId.isEmpty()) {
+        query.addQueryItem(QStringLiteral("deviceId"), deviceId);
+    }
     result.setQuery(query);
     return result;
 }

@@ -163,6 +163,37 @@ private:
     bool completed_ = false;
 };
 
+class RecognitionCsvRequestHandle final : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit RecognitionCsvRequestHandle(RequestContext context,
+                                         QObject *parent = nullptr);
+    ~RecognitionCsvRequestHandle() override;
+
+    void cancel();
+    [[nodiscard]] const RequestContext &context() const noexcept;
+
+signals:
+    void dataChunkReceived(const QByteArray &chunk);
+    void succeeded();
+    void failed(const RecognitionApiError &error);
+    void finished();
+
+private:
+    friend class RecognitionApiClient;
+    void consumeChunk(const QByteArray &chunk);
+    void completeSuccess();
+    void completeFailure(RecognitionApiError error);
+
+    RequestContext context_;
+    QPointer<HttpRequestHandle> transportHandle_;
+    QByteArray pendingPrefix_;
+    bool prefixValidated_ = false;
+    bool completed_ = false;
+};
+
 class RecognitionApiClient final : public QObject
 {
     Q_OBJECT
@@ -186,6 +217,12 @@ public:
         int page,
         quint64 sessionGeneration,
         quint64 requestGeneration);
+    [[nodiscard]] RecognitionCsvRequestHandle *exportCsv(
+        const QDateTime &startTime,
+        const QDateTime &endTime,
+        const QString &deviceId,
+        quint64 sessionGeneration,
+        quint64 requestGeneration);
 
 private:
     [[nodiscard]] QUrl detailEndpoint(const QString &recognitionId) const;
@@ -194,6 +231,9 @@ private:
                                        const QString &endTime,
                                        const QString &deviceId,
                                        int page) const;
+    [[nodiscard]] QUrl exportEndpoint(const QString &startTime,
+                                      const QString &endTime,
+                                      const QString &deviceId) const;
 
     QUrl loginBaseUrl_;
     HttpClient *httpClient_;

@@ -774,34 +774,50 @@ TASK-016 已验收。
 
 **实现内容**
 
-- 实现 `CsvDownloadService`，复用历史页面当前筛选条件。
-- 保存对话框确认路径后才发起请求，下载中禁止重复导出但不阻塞浏览。
-- 使用 120 秒总时限，按网络数据块写入 `QSaveFile`，不把整个文件载入内存。
-- 完成前校验请求上下文，成功后原子 `commit`；失败、取消或会话失效时取消写入。
-- 不自动重试 CSV 下载。
+- 在 `RecognitionApiClient` 实现 CSV 导出请求，固定复用 `HistoryService` 最后已提交的 `startTime`、`endTime` 和可选 `deviceId` 筛选快照，忽略 `page`、`pageSize` 和未搜索的编辑值。
+- 只为响应开头保留有界小缓冲，严格校验唯一且语义精确的 `text/csv; charset=utf-8`、字节 `EF BB BF`、固定十列表头和 CRLF 后逐块转发；Content-Type 的 ASCII 大小写及参数周围可选空白可归一，重复头、重复或未知参数和非 `utf-8` 字符集必须拒绝，不累计正文。
+- `HistoryPage` 负责保存对话框，默认文件名为 `车牌识别记录_yyyyMMdd_HHmmss.csv`、默认后缀为 `csv`；取消对话框时不得创建文件或发起请求。
+- 实现 `CsvDownloadService`。先成功打开禁用 direct-write fallback 的 `QSaveFile`，再发起 120 秒流式请求；数据块增量写入，不把完整文件载入内存。
+- 同一时刻只允许一个导出。下载中只禁用导出按钮，搜索、翻页和导航继续可用；页面隐藏不取消已经确认的导出，首版不增加独立取消按钮。
+- 原子 `commit()` 前同时校验活动句柄、`sessionGeneration`、递增的 `requestGeneration` 和不可变筛选快照；显式取消、会话失效、退出关闭、服务析构或任何下载、协议、写入和提交失败均取消写入。
+- 失败时原目标不存在则不得产生目标文件，原目标存在则保留原内容，并且不得留下 `QSaveFile` 临时文件。CSV 下载不自动重试，失败不改变历史表格。
+- `Application` 持有并注入同一 `CsvDownloadService`；对象顺序保证 controller/window、CSV 服务、HistoryService、RecognitionApi/Http/Session 依赖依次销毁。现有 `HttpClient` 的 CSV 流式模式和 `HistoryService` 的最后提交筛选接口直接复用，无需修改。
 
 **预计修改文件**
 
+- `README.md`
+- `docs/REQ-001.md`
+- `docs/REQ-001-design.md`
+- `docs/REQ-001-tasks.md`
 - `src/services/CsvDownloadService.h`
 - `src/services/CsvDownloadService.cpp`
 - `src/infrastructure/http/RecognitionApiClient.*`
 - `src/ui/pages/HistoryPage.*`
+- `src/ui/windows/MainWindow.*`
+- `src/app/Application.h`
+- `src/app/Application.cpp`
+- `tests/http/tst_recognition_api_csv.cpp`
 - `tests/services/tst_csv_download_service.cpp`
 - `tests/ui/tst_history_export.cpp`
+- `tests/ui/tst_main_window_shell.cpp`
+- `tests/app/tst_application_startup.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
 **独立测试**
 
-- Mock 返回 UTF-8 BOM 和固定列顺序，验证保存文件字节一致。
-- 覆盖分块下载、120 秒策略、网络失败、用户取消、会话失效和目标路径错误。
-- 验证任何失败均不留下目标文件或临时文件。
+- API Mock 覆盖三个筛选字段及 URL 编码、无分页参数、Bearer Token、120 秒策略、分块转发、Content-Type 归一与拒绝边界、BOM、固定表头、CRLF、严格 4xx/5xx 信封、401、TLS、网络、超时、取消、重定向和无重试。
+- 使用大于单个网络块的固定 CSV，验证保存字节完全一致且 API、服务均不累计完整正文。
+- 覆盖保存对话框取消零请求、默认文件名/后缀、一次只允许一个导出、最后已提交筛选、未搜索编辑值忽略、下载期间搜索和翻页仍可用，以及页面隐藏不取消已确认导出。
+- 覆盖显式取消、会话失效、退出关闭、服务析构、目标路径错误、写入失败和提交失败；验证不存在的目标仍不存在、已有目标内容不变并且均无临时文件残留。
+- 验证 `Application` 持有并注入同一 CSV 服务，窗口、CSV 服务、HistoryService 和共同依赖按规定顺序安全销毁。
 
 **验收标准**
 
-- 导出请求与页面当前筛选完全一致，不使用当前表格拼装 CSV。
-- 文件首行为规定的 10 个中文列名，内容由服务端生成并完整保存。
-- 下载期间 UI 保持响应，取消和失败不改变历史表格。
+- 导出请求与历史页最后已提交的非分页筛选完全一致，不使用未搜索编辑值或当前表格拼装 CSV。
+- 文件响应只接受规定 Content-Type、BOM、十个中文列名和 CRLF，正文由服务端生成并流式完整保存。
+- 下载期间 UI 保持响应且页面隐藏不打断导出；显式取消、会话失效、退出关闭和失败不改变历史表格。
+- 原子保存不会以不完整内容新建或覆盖目标，失败保留既有文件且无临时残留。
 
 ### TASK-018 实现黑白名单 API 和业务服务
 

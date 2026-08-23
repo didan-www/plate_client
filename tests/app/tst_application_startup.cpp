@@ -5,6 +5,7 @@
 #include "services/ImageLoadService.h"
 #include "services/HistoryService.h"
 #include "services/RealtimeRecognitionStore.h"
+#include "services/CsvDownloadService.h"
 #include "support/MockHttpServer.h"
 #include "support/MockMqttClient.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
@@ -231,6 +232,8 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     QCOMPARE(window->realtimePage()->store(), runtime->realtimeStore());
     QCOMPARE(window->realtimePage()->imageLoadService(), runtime->imageLoadService());
     QCOMPARE(window->historyPage()->historyService(), runtime->historyService());
+    QCOMPARE(window->historyPage()->csvDownloadService(),
+             runtime->csvDownloadService());
     QCOMPARE(server.requests().at(1).target,
              QByteArrayLiteral("/api/v1/clients/heartbeat"));
     QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
@@ -291,18 +294,23 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     QPointer<MainWindow> guardedWindow(window);
     QPointer<ImageLoadService> guardedImages(runtime->imageLoadService());
     QPointer<HistoryService> guardedHistory(runtime->historyService());
+    QPointer<CsvDownloadService> guardedCsv(runtime->csvDownloadService());
     connect(window, &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("window")); });
     connect(runtime->imageLoadService(), &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("images")); });
     connect(runtime->historyService(), &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("history")); });
+    connect(runtime->csvDownloadService(), &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("csv")); });
     runtime.reset();
     QVERIFY(guardedWindow.isNull());
     QVERIFY(guardedImages.isNull());
     QVERIFY(guardedHistory.isNull());
+    QVERIFY(guardedCsv.isNull());
     QCOMPARE(destructionOrder,
              QStringList({QStringLiteral("window"),
+                          QStringLiteral("csv"),
                           QStringLiteral("history"),
                           QStringLiteral("images")}));
 }

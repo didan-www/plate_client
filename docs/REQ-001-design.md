@@ -104,7 +104,7 @@ TASK-015 由 `Application` 持有 `ImageLoadService`。成员和对象生命周�
 | 模块 | 职责 |
 | --- | --- |
 | `HistoryService` | 组织筛选、分页和请求代次，向页面提供不可变分页结果 |
-| `CsvDownloadService` | 请求服务端 CSV、显示保存对话框、流式写入和原子提交 |
+| `CsvDownloadService` | 接收已确认目标路径和历史筛选快照，请求服务端 CSV、流式写入、上下文校验、取消和原子提交 |
 | `AccessListApiClient` | 名单分页查询、精确查询、新增和删除 |
 | `AccessListService` | 车牌规范化、写操作串行化、超时核实和页面刷新 |
 
@@ -116,7 +116,7 @@ TASK-015 由 `Application` 持有 `ImageLoadService`。成员和对象生命周�
 | `MainWindow` | 渐变自绘标题栏、最大化窗口、左侧导航、页面容器和关闭事件 |
 | `NavigationSidebar` | 导航、用户、HTTP/MQTT 状态、版本和退出 |
 | `RealtimePage` | 当前图片、当前状态、结果信息和实时表格 |
-| `HistoryPage` | 时间/设备筛选和历史分页表格；CSV 下载从 TASK-017 开始接入 |
+| `HistoryPage` | 时间/设备筛选、历史分页表格和 CSV 保存对话框；只把用户确认的路径及最后已提交筛选交给服务 |
 | `AccessListPage` | 黑白名单标签、搜索、分页、新增和删除 |
 | `RecognitionTableModel` | 实时或历史只读表格模型 |
 | `AccessListTableModel` | 名单只读表格模型 |
@@ -278,7 +278,9 @@ QNetworkAccessManager 和 QMqttClient 本身是异步的，回调只执行解析
 
 ### 8.3 CSV 写入
 
-CSV 由服务端生成。Qt 按网络数据块增量写入 `QSaveFile`，不把整个文件加载进内存。最终 `commit` 前再次验证请求未取消；失败时调用取消写入并删除临时文件。
+CSV 由服务端生成。`RecognitionApiClient` 只为 `EF BB BF`、固定十列表头及其 CRLF 保留有界小缓冲，并严格验证唯一且语义精确的 `text/csv; charset=utf-8`：ASCII 大小写和参数周围可选空白可以归一，重复头、重复或未知参数以及非 `utf-8` 字符集必须拒绝；验证后的正文仍按网络数据块转发，不累计完整文件。
+
+`CsvDownloadService` 在发起请求前先打开 `QSaveFile`，并调用 `setDirectWriteFallback(false)`，确保无法创建同目录临时文件时直接失败而不降级覆盖目标。数据块增量写入临时文件；最终 `commit()` 前同时验证当前会话代次、活动请求代次、活动句柄和不可变筛选快照。写入、下载、协议或提交失败，以及显式取消、会话失效、退出关闭或服务销毁时调用 `cancelWriting()`。原目标不存在时不产生目标文件，原目标存在时保留原内容，且不得留下 `QSaveFile` 临时文件。
 
 ### 8.4 HTTP 总时限和重试
 
@@ -470,10 +472,12 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 - 历史表格固定十列：记录 ID、设备、车牌号、状态、错误码、错误信息、拍摄时间、开始时间、完成时间和耗时。
 - `Application` 在 `RecognitionApiClient` 和 `SessionService` 之后构造并持有 `HistoryService`，把同一实例注入正式 `MainWindow`/`HistoryPage`。成员声明和销毁顺序必须保证主窗口先销毁并取消页面请求，其后销毁 `HistoryService`，最后才销毁其依赖的 `RecognitionApiClient`、`HttpClient` 和 `SessionService`。
 - TASK-016 不创建 CSV 服务、不显示或接入导出操作；以下 CSV 流程从 TASK-017 开始实现。
-- 导出时将当前筛选条件发送给服务端 CSV 接口。
-- 保存对话框取消时不发起下载。
-- 下载进行中禁用重复导出，但不阻塞页面浏览。
-- 导出失败不改变当前查询结果。
+- 导出固定使用 `HistoryService` 最后已提交筛选中的 `startTime`、`endTime` 和可选 `deviceId`，忽略历史页码、固定 `pageSize` 和控件中尚未搜索的编辑值；导出不从当前表格拼装内容。
+- `HistoryPage` 负责保存对话框。默认文件名为 `车牌识别记录_yyyyMMdd_HHmmss.csv`，默认后缀为 `csv`；取消对话框时不创建 `QSaveFile`，也不发起下载。
+- 确认路径后，`CsvDownloadService` 先成功打开禁用 direct-write fallback 的 `QSaveFile`，再通过 `RecognitionApiClient` 发起 120 秒 CSV 流式请求。请求上下文按值保存上述三个筛选字段，不含 `page` 或 `pageSize`。
+- 同一服务一次只允许一个导出。下载中只禁用导出按钮，搜索、翻页和导航仍可继续；首版不增加独立取消按钮。
+- 页面隐藏不取消用户已经确认的导出；显式服务取消、会话失效、退出关闭或服务析构取消活动请求和文件写入。网络、TLS、超时、4xx/5xx、协议、写入或提交失败不重试，也不改变当前历史查询结果。
+- `Application` 在 `HistoryService` 之后构造并持有 `CsvDownloadService`，把同一实例注入正式 `MainWindow`/`HistoryPage`。成员声明和销毁顺序必须保证 controller/window 先销毁，其后销毁 CSV 服务，再销毁 `HistoryService`，最后才销毁共同依赖的 `RecognitionApiClient`、`HttpClient` 和 `SessionService`。
 
 ## 15. 黑白名单设计
 
@@ -512,7 +516,7 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 
 1. 将会话状态切换为 LoggingOut 并递增会话代次。
 2. 停止心跳、令牌到期和 MQTT 重连定时器。
-3. 取消所有 QNetworkReply 和图片重试定时器。
+3. 取消所有 QNetworkReply、CSV 文件写入和图片重试定时器。
 4. 使用当前令牌构造并发送尽力注销请求；请求不允许更新业务 UI，也不得阻止本地退出。
 5. 断开 MQTT 并清除订阅。
 6. 清空实时记录、页面模型、当前图片、访问令牌和 MQTT 凭据。
@@ -534,7 +538,7 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 | MQTT 永久连接或订阅错误 | 停止当前会话自动重连，显示未连接及脱敏原因，保留 HTTP 功能 |
 | MQTT 消息非法 | 丢弃并写脱敏技术日志 |
 | 图片错误 | 重试或显示占位，不修改识别业务状态 |
-| CSV 下载错误 | 取消 QSaveFile，不留下不完整文件 |
+| CSV 下载错误 | 取消 `QSaveFile`；不新建或覆盖目标，保留既有目标原内容且不留下临时文件 |
 | 名单写入结果不明 | 精确查询服务器状态，不猜测结果 |
 | 旧异步响应 | 静默丢弃，不修改 UI |
 
@@ -588,7 +592,10 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 - `HistoryService` 验证新查询取消旧请求，并以会话代次、请求代次、活动句柄和不可变筛选快照共同拒绝旧响应；失败保留最后成功页。
 - `HistoryPage` 验证默认当天、十列表格、搜索/重置、翻页使用最后提交条件、首次及重新显示刷新、切离取消、分页按钮和非阻断错误；`AccessListPage` 验证快速筛选时只应用最后响应。
 - `Application` 启动测试验证同一 `HistoryService` 被持有并注入 `MainWindow`，且主窗口、历史服务及其 HTTP/会话依赖按设计顺序安全销毁。
-- CSV 测试验证固定表头顺序、取消和失败不留下目标文件。
+- `RecognitionApiClient` CSV 测试验证导出 URL 只含最后提交的三个筛选字段、120 秒策略、唯一且语义精确的 Content-Type、UTF-8 BOM、固定十列表头和 CRLF、有界首行缓冲、分块转发、严格错误信封、401、取消及无重试。
+- `CsvDownloadService` 测试验证先打开 `QSaveFile` 后请求、direct-write fallback 禁用、逐块字节一致写入、四重上下文校验、重复导出禁止、显式取消、会话失效和析构；覆盖不存在目标失败后仍不存在、已有目标失败后原内容不变、不可写路径、提交失败和无临时残留。
+- `HistoryPage` CSV 测试验证默认文件名与后缀、保存对话框取消零请求、最后已提交筛选而非未搜索编辑值、下载仅禁用导出按钮、搜索/翻页/导航继续可用、页面隐藏不取消已确认导出且导出失败不改变表格。
+- `Application` 启动测试还要验证同一 `CsvDownloadService` 被持有并注入 `MainWindow`，销毁顺序固定为 controller/window、CSV 服务、历史服务、共同 HTTP/会话依赖。
 - 名单超时测试验证精确查询后的成功、失败和未知三种结果。
 
 ### 20.3 端到端测试

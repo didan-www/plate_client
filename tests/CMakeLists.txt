@@ -89,8 +89,22 @@ add_executable(
 )
 
 add_executable(
+    tst_recognition_api_csv
+    http/tst_recognition_api_csv.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     tst_history_service
     services/tst_history_service.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
+    tst_csv_download_service
+    services/tst_csv_download_service.cpp
     support/MockHttpServer.h
     support/MockHttpServer.cpp
 )
@@ -152,6 +166,13 @@ add_executable(
 )
 
 add_executable(
+    tst_history_export
+    ui/tst_history_export.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     plate_client_main_window_preview EXCLUDE_FROM_ALL
     ui/main_window_preview.cpp
 )
@@ -186,7 +207,9 @@ plate_client_apply_project_options(tst_realtime_store)
 plate_client_apply_project_options(tst_recognition_api_detail)
 plate_client_apply_project_options(tst_recognition_api_image)
 plate_client_apply_project_options(tst_recognition_api_history)
+plate_client_apply_project_options(tst_recognition_api_csv)
 plate_client_apply_project_options(tst_history_service)
+plate_client_apply_project_options(tst_csv_download_service)
 plate_client_apply_project_options(tst_image_load_service)
 plate_client_apply_project_options(tst_image_decode_limits)
 plate_client_apply_project_options(tst_reconnect_reconciler)
@@ -196,6 +219,7 @@ plate_client_apply_project_options(tst_http_status_indicator)
 plate_client_apply_project_options(tst_recognition_table_model)
 plate_client_apply_project_options(tst_realtime_page)
 plate_client_apply_project_options(tst_history_page)
+plate_client_apply_project_options(tst_history_export)
 plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
@@ -331,10 +355,30 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_recognition_api_csv PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_recognition_api_csv
+    PRIVATE
+        plate_client_reconciliation
+        Qt6::Network
+        Qt6::Test
+)
+
 target_include_directories(tst_history_service PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(
     tst_history_service
+    PRIVATE
+        plate_client_history
+        Qt6::Network
+        Qt6::Test
+)
+
+target_include_directories(tst_csv_download_service PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_csv_download_service
     PRIVATE
         plate_client_history
         Qt6::Network
@@ -420,6 +464,16 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_history_export PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_history_export
+    PRIVATE
+        plate_client_ui
+        Qt6::Network
+        Qt6::Test
+)
+
 target_link_libraries(
     plate_client_main_window_preview
     PRIVATE
@@ -462,7 +516,9 @@ add_test(NAME unit.realtime_store COMMAND tst_realtime_store)
 add_test(NAME unit.recognition_api_detail COMMAND tst_recognition_api_detail)
 add_test(NAME unit.recognition_api_image COMMAND tst_recognition_api_image)
 add_test(NAME unit.recognition_api_history COMMAND tst_recognition_api_history)
+add_test(NAME unit.recognition_api_csv COMMAND tst_recognition_api_csv)
 add_test(NAME unit.history_service COMMAND tst_history_service)
+add_test(NAME unit.csv_download_service COMMAND tst_csv_download_service)
 add_test(NAME unit.image_load_service COMMAND tst_image_load_service)
 add_test(NAME unit.image_decode_limits COMMAND tst_image_decode_limits)
 add_test(NAME unit.reconnect_reconciler COMMAND tst_reconnect_reconciler)
@@ -484,6 +540,7 @@ add_test(NAME unit.history_page COMMAND tst_history_page)
 add_test(NAME unit.history_page.dpi100 COMMAND tst_history_page)
 add_test(NAME unit.history_page.dpi150 COMMAND tst_history_page)
 add_test(NAME unit.history_page.dpi200 COMMAND tst_history_page)
+add_test(NAME unit.history_export COMMAND tst_history_export)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
@@ -504,7 +561,9 @@ set_tests_properties(
     unit.recognition_api_detail
     unit.recognition_api_image
     unit.recognition_api_history
+    unit.recognition_api_csv
     unit.history_service
+    unit.csv_download_service
     unit.image_load_service
     unit.image_decode_limits
     unit.reconnect_reconciler
@@ -526,6 +585,7 @@ set_tests_properties(
     unit.history_page.dpi100
     unit.history_page.dpi150
     unit.history_page.dpi200
+    unit.history_export
     unit.app_controller_login
     unit.application_startup
     app.startup
