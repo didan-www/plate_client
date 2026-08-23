@@ -5,6 +5,7 @@
 #include "infrastructure/http/HeartbeatApiClient.h"
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/logging/TechnicalLogger.h"
+#include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
 #include "services/SessionService.h"
@@ -26,9 +27,11 @@ void showStartupError(const QString &message)
 } // namespace
 
 Application::Application(StartupErrorPresenter errorPresenter,
-                         AppController::WindowFactory windowFactory)
+                         AppController::WindowFactory windowFactory,
+                         MqttSubscriberFactory mqttSubscriberFactory)
     : errorPresenter_(errorPresenter ? std::move(errorPresenter) : showStartupError)
     , windowFactory_(std::move(windowFactory))
+    , mqttSubscriberFactory_(std::move(mqttSubscriberFactory))
 {
 }
 
@@ -84,15 +87,29 @@ bool Application::initialize(BootstrapConfigLoadResult result)
     heartbeatService_ = std::make_unique<HeartbeatService>(heartbeatApiClient_.get(),
                                                            httpClient_.get(),
                                                            sessionService_.get());
+    const QString mqttClientId = config.clientId().toString(QUuid::WithoutBraces);
+    if (mqttSubscriberFactory_) {
+        mqttSubscriber_ = mqttSubscriberFactory_(mqttClientId,
+                                                 config.allowInsecureTransport(),
+                                                 sessionService_.get());
+    } else {
+        mqttSubscriber_ = std::make_unique<MqttRecognitionSubscriber>(
+            mqttClientId, config.allowInsecureTransport(), sessionService_.get());
+    }
+    Q_ASSERT(mqttSubscriber_);
     settings_ = std::make_unique<QSettings>();
     AppController::WindowFactory authenticatedWindowFactory = windowFactory_;
     if (!authenticatedWindowFactory) {
-        authenticatedWindowFactory = [heartbeat = heartbeatService_.get()](
+        authenticatedWindowFactory = [heartbeat = heartbeatService_.get(),
+                                      mqtt = mqttSubscriber_.get()](
                                          const QString &displayName) {
             auto *window = new MainWindow(displayName);
             window->sidebar()->setHttpConnectivityState(heartbeat->state());
+            window->sidebar()->setMqttConnectivityState(mqtt->state(), mqtt->statusReason());
             QObject::connect(heartbeat, &HeartbeatService::stateChanged,
                              window->sidebar(), &NavigationSidebar::setHttpConnectivityState);
+            QObject::connect(mqtt, &MqttRecognitionSubscriber::stateChanged,
+                             window->sidebar(), &NavigationSidebar::setMqttConnectivityState);
             return window;
         };
     }

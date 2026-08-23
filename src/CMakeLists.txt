@@ -65,6 +65,13 @@ add_library(
 )
 
 add_library(
+    plate_client_mqtt STATIC
+    infrastructure/mqtt/MqttError.h
+    infrastructure/mqtt/MqttRecognitionSubscriber.h
+    infrastructure/mqtt/MqttRecognitionSubscriber.cpp
+)
+
+add_library(
     plate_client_ui STATIC
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
@@ -146,7 +153,25 @@ target_include_directories(
 target_link_libraries(
     plate_client_ui
     PUBLIC
+        plate_client_mqtt
         Qt6::Widgets
+)
+
+plate_client_apply_project_options(plate_client_mqtt)
+
+target_include_directories(
+    plate_client_mqtt
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_mqtt
+    PUBLIC
+        plate_client_auth
+        Qt6::Core
+        Qt6::Network
+        Qt6::Mqtt
 )
 
 plate_client_apply_project_options(plate_client_app)
@@ -165,6 +190,7 @@ target_link_libraries(
         plate_client_http
         plate_client_heartbeat
         plate_client_logging
+        plate_client_mqtt
         plate_client_ui
         Qt6::Widgets
 )

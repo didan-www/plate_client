@@ -1,7 +1,9 @@
 #include "app/Application.h"
 
 #include "app/AppController.h"
+#include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
 #include "support/MockHttpServer.h"
+#include "support/MockMqttClient.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
 #include "ui/windows/LoginWindow.h"
@@ -139,7 +141,20 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
                                                {QStringLiteral("allowInsecureTransport"), true},
                                            })
                                   .toJson(QJsonDocument::Compact);
-    Application runtime([](const QString &) { qFatal("Unexpected startup error."); });
+    MockMqttClient mqttClient;
+    Application runtime(
+        [](const QString &) { qFatal("Unexpected startup error."); },
+        {},
+        [&mqttClient](const QString &clientId,
+                      bool allowInsecureTransport,
+                      SessionService *sessions) {
+            return std::make_unique<MqttRecognitionSubscriber>(
+                clientId,
+                allowInsecureTransport,
+                sessions,
+                &mqttClient,
+                std::chrono::milliseconds(1));
+        });
     QVERIFY(runtime.startFromConfigFile(writeConfig(directory.path(), bytes)));
 
     LoginWindow *login = runtime.controller()->loginWindow();
@@ -156,6 +171,14 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
              QByteArrayLiteral("/api/v1/clients/heartbeat"));
     QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
                  QStringLiteral("在线"));
+    QCOMPARE(window->sidebar()->mqttStatusIndicator()->statusText(),
+             QStringLiteral("重连中"));
+    mqttClient.reportConnected(mqttClient.configuredGeneration);
+    QCOMPARE(window->sidebar()->mqttStatusIndicator()->statusText(),
+             QStringLiteral("重连中"));
+    mqttClient.reportSubscriptionSucceeded(mqttClient.configuredGeneration);
+    QCOMPARE(window->sidebar()->mqttStatusIndicator()->statusText(),
+             QStringLiteral("已连接"));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

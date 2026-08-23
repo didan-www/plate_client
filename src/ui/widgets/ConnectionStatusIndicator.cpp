@@ -72,6 +72,28 @@ void ConnectionStatusIndicator::setHttpConnectivityState(HttpConnectivityState s
     }
 }
 
+void ConnectionStatusIndicator::setMqttConnectivityState(MqttConnectivityState state,
+                                                          const QString &safeReason)
+{
+    switch (state) {
+    case MqttConnectivityState::Disconnected:
+        setStatus(VisualState::Neutral, QStringLiteral("未连接"));
+        break;
+    case MqttConnectivityState::Reconnecting:
+        setStatus(VisualState::Busy, QStringLiteral("重连中"));
+        break;
+    case MqttConnectivityState::Connected:
+        setStatus(VisualState::Online, QStringLiteral("已连接"));
+        break;
+    case MqttConnectivityState::PermanentError:
+        setStatus(VisualState::Error,
+                  safeReason.isEmpty()
+                      ? QStringLiteral("未连接（配置或授权错误）")
+                      : QStringLiteral("未连接（%1）").arg(safeReason));
+        break;
+    }
+}
+
 ConnectionStatusIndicator::VisualState ConnectionStatusIndicator::state() const noexcept
 {
     return state_;

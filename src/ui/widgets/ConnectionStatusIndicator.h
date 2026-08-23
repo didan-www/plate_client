@@ -1,5 +1,6 @@
 #pragma once
 
+#include "infrastructure/mqtt/MqttError.h"
 #include "services/HttpConnectivityState.h"
 
 #include <QWidget>
@@ -23,6 +24,8 @@ public:
 
     void setStatus(VisualState state, const QString &text);
     void setHttpConnectivityState(HttpConnectivityState state);
+    void setMqttConnectivityState(MqttConnectivityState state,
+                                  const QString &safeReason = {});
     [[nodiscard]] VisualState state() const noexcept;
     [[nodiscard]] QString statusText() const;
 

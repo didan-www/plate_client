@@ -1,5 +1,6 @@
 #pragma once
 
+#include "infrastructure/mqtt/MqttError.h"
 #include "services/HttpConnectivityState.h"
 
 #include <QWidget>
@@ -26,6 +27,8 @@ public:
     [[nodiscard]] ConnectionStatusIndicator *httpStatusIndicator() const noexcept;
     [[nodiscard]] ConnectionStatusIndicator *mqttStatusIndicator() const noexcept;
     void setHttpConnectivityState(HttpConnectivityState state);
+    void setMqttConnectivityState(MqttConnectivityState state,
+                                  const QString &safeReason = {});
 
 signals:
     void pageRequested(int pageIndex);

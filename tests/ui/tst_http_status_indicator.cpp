@@ -11,6 +11,7 @@ class HttpStatusIndicatorTest final : public QObject
 
 private slots:
     void mapsConnectivityStates();
+    void mapsMqttStatesIndependently();
     void abnormalStateDoesNotDisableAvailableNavigation();
 };
 
@@ -29,6 +30,32 @@ void HttpStatusIndicatorTest::mapsConnectivityStates()
     indicator.setHttpConnectivityState(HttpConnectivityState::Abnormal);
     QCOMPARE(indicator.state(), ConnectionStatusIndicator::VisualState::Error);
     QCOMPARE(indicator.statusText(), QStringLiteral("异常"));
+}
+
+void HttpStatusIndicatorTest::mapsMqttStatesIndependently()
+{
+    NavigationSidebar sidebar(QStringLiteral("测试操作员"),
+                              QStringLiteral("0.1.1"),
+                              QStringLiteral("2026-08-15"));
+    sidebar.setHttpConnectivityState(HttpConnectivityState::Online);
+
+    sidebar.setMqttConnectivityState(MqttConnectivityState::Reconnecting);
+    QCOMPARE(sidebar.mqttStatusIndicator()->state(),
+             ConnectionStatusIndicator::VisualState::Busy);
+    QCOMPARE(sidebar.mqttStatusIndicator()->statusText(), QStringLiteral("重连中"));
+    QCOMPARE(sidebar.httpStatusIndicator()->statusText(), QStringLiteral("在线"));
+
+    sidebar.setMqttConnectivityState(MqttConnectivityState::Connected);
+    QCOMPARE(sidebar.mqttStatusIndicator()->statusText(), QStringLiteral("已连接"));
+    QCOMPARE(sidebar.httpStatusIndicator()->statusText(), QStringLiteral("在线"));
+
+    sidebar.setMqttConnectivityState(MqttConnectivityState::PermanentError,
+                                     QStringLiteral("证书校验失败"));
+    QCOMPARE(sidebar.mqttStatusIndicator()->state(),
+             ConnectionStatusIndicator::VisualState::Error);
+    QCOMPARE(sidebar.mqttStatusIndicator()->statusText(),
+             QStringLiteral("未连接（证书校验失败）"));
+    QCOMPARE(sidebar.httpStatusIndicator()->statusText(), QStringLiteral("在线"));
 }
 
 void HttpStatusIndicatorTest::abnormalStateDoesNotDisableAvailableNavigation()

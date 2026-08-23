@@ -218,3 +218,9 @@ void NavigationSidebar::setHttpConnectivityState(HttpConnectivityState state)
 {
     httpStatusIndicator_->setHttpConnectivityState(state);
 }
+
+void NavigationSidebar::setMqttConnectivityState(MqttConnectivityState state,
+                                                 const QString &safeReason)
+{
+    mqttStatusIndicator_->setMqttConnectivityState(state, safeReason);
+}

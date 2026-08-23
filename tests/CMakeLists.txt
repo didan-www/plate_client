@@ -52,6 +52,12 @@ add_executable(
 )
 
 add_executable(
+    tst_mqtt_subscriber
+    mqtt/tst_mqtt_subscriber.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
     tst_login_window
     ui/tst_login_window.cpp
 )
@@ -83,6 +89,7 @@ add_executable(
     app/tst_application_startup.cpp
     support/MockHttpServer.h
     support/MockHttpServer.cpp
+    support/MockMqttClient.h
 )
 
 plate_client_apply_project_options(tst_smoke)
@@ -94,6 +101,7 @@ plate_client_apply_project_options(tst_http_client)
 plate_client_apply_project_options(tst_auth_api_client)
 plate_client_apply_project_options(tst_session_service)
 plate_client_apply_project_options(tst_heartbeat_service)
+plate_client_apply_project_options(tst_mqtt_subscriber)
 plate_client_apply_project_options(tst_login_window)
 plate_client_apply_project_options(tst_main_window_shell)
 plate_client_apply_project_options(tst_http_status_indicator)
@@ -179,6 +187,15 @@ target_link_libraries(
         Qt6::Test
 )
 
+target_include_directories(tst_mqtt_subscriber PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_mqtt_subscriber
+    PRIVATE
+        plate_client_mqtt
+        Qt6::Test
+)
+
 target_link_libraries(
     tst_login_window
     PRIVATE
@@ -236,6 +253,7 @@ add_test(NAME unit.http_client COMMAND tst_http_client)
 add_test(NAME unit.auth_api_client COMMAND tst_auth_api_client)
 add_test(NAME unit.session_service COMMAND tst_session_service)
 add_test(NAME unit.heartbeat_service COMMAND tst_heartbeat_service)
+add_test(NAME unit.mqtt_subscriber COMMAND tst_mqtt_subscriber)
 add_test(NAME unit.login_window COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi100 COMMAND tst_login_window)
 add_test(NAME unit.login_window.dpi150 COMMAND tst_login_window)
@@ -259,6 +277,7 @@ set_tests_properties(
     unit.auth_api_client
     unit.session_service
     unit.heartbeat_service
+    unit.mqtt_subscriber
     unit.login_window
     unit.login_window.dpi100
     unit.login_window.dpi150
