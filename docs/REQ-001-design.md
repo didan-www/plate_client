@@ -116,12 +116,12 @@ TASK-015 由 `Application` 持有 `ImageLoadService`。成员和对象生命周�
 | `MainWindow` | 渐变自绘标题栏、最大化窗口、左侧导航、页面容器和关闭事件 |
 | `NavigationSidebar` | 导航、用户、HTTP/MQTT 状态、版本和退出 |
 | `RealtimePage` | 当前图片、当前状态、结果信息和实时表格 |
-| `HistoryPage` | 时间/设备筛选、分页表格和 CSV 下载 |
+| `HistoryPage` | 时间/设备筛选和历史分页表格；CSV 下载从 TASK-017 开始接入 |
 | `AccessListPage` | 黑白名单标签、搜索、分页、新增和删除 |
 | `RecognitionTableModel` | 实时或历史只读表格模型 |
 | `AccessListTableModel` | 名单只读表格模型 |
 
-`RealtimePage` 只订阅 `RealtimeRecognitionStore` 和 `ImageLoadService` 的信号，不解析 MQTT、不构造 HTTP 请求，也不复制业务状态机。`RecognitionTableModel` 只读映射 Store 的 `items`，不维护独立业务副本；图片服务返回的 `QImage` 仅在 `RealtimePage` 所在线程再次核对当前记录后转换为 `QPixmap`。
+`RealtimePage` 只订阅 `RealtimeRecognitionStore` 和 `ImageLoadService` 的信号，不解析 MQTT、不构造 HTTP 请求，也不复制业务状态机。`RecognitionTableModel` 以实时或历史模式只读映射对应服务提供的 `items`，不维护独立业务副本；图片服务返回的 `QImage` 仅在 `RealtimePage` 所在线程再次核对当前记录后转换为 `QPixmap`。
 
 `LoginWindow` 固定为 `520×420` 逻辑尺寸，使用 `44px`、`#1F5F99` 的 Qt 自绘标题栏并提供拖动、最小化和关闭，不提供最大化或缩放。主体使用浅灰背景；Logo 标题组合居中，用户名和密码行按图标、左对齐标签、输入框三列对齐，登录按钮固定为 `220×48` 并靠近底部。错误提示预留稳定区域，不得引起按钮位移。
 
@@ -235,7 +235,7 @@ src/
 | `PageResult<T>` | `QList<T> items`、`int page`、`int pageSize`、`qint64 total` |
 | `EmptyResponse` | 无业务字段；用于成功信封要求 `data=null` 的接口 |
 
-`page` 从 1 开始，`pageSize` 首版固定为 100，`total` 不得为负。HTTP 适配器负责把统一信封转换为明确的成功值或错误类型；应用服务和 QWidget 不得自行读取 JSON 字段。
+`page` 从 1 开始，`pageSize` 首版固定为 100，`total` 不得为负。历史 HTTP 适配器还必须验证响应 `page` 与请求 `page` 完全相同，不同则返回协议错误。HTTP 适配器负责把统一信封转换为明确的成功值或错误类型；应用服务和 QWidget 不得自行读取 JSON 字段。
 
 各接口成功值固定为：
 
@@ -459,10 +459,17 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 
 ## 14. 历史查询和 CSV
 
-- `HistoryPage` 修改筛选或页码时递增页面请求代次。
-- `HistoryService` 捕获完整筛选条件并发起请求。
-- 旧代次响应只记录调试信息，不修改表格和分页状态。
-- 查询失败保留当前表格，显示非阻断错误。
+- 历史时间固定使用 `+08:00`。默认筛选从当前北京时间当天 `00:00:00+08:00` 开始，到次日 `00:00:00+08:00` 结束，服务端按 `[startTime, endTime)` 半开区间查询。
+- `deviceId` 使用可选自由文本输入；提交筛选时去除首尾空白，结果为空则在 URL 中省略该参数。
+- 页面首次显示时查询默认条件；之后每次切离再重新显示时，刷新最后已提交筛选。切离页面时取消在途请求。
+- 搜索和重置都提交新的不可变筛选并回到第一页；重置恢复默认北京时间当天、清空设备并立即查询。上一页和下一页只基于最后已提交筛选及最后成功的 `PageResult`，控件中尚未搜索的编辑值不参与翻页。
+- `pageSize` 固定为 100，不由 UI 或服务调用方修改。响应 `page` 与请求 `page` 不一致时按协议错误处理并保留原结果。
+- `HistoryService` 按值捕获包含 `startTime`、`endTime`、可选 `deviceId`、`page` 和固定 `pageSize` 的完整筛选快照；每次新查询先递增 `requestGeneration` 并取消旧请求。
+- 响应应用前同时验证当前 `sessionGeneration`、活动 `requestGeneration`、活动请求句柄和不可变筛选快照。任一不匹配时丢弃结果，不修改表格和分页状态。
+- 显式取消和旧上下文失效不显示页面错误；4xx、5xx、网络、TLS、超时或协议错误显示非阻断错误，并保留最后成功的表格、页码和总数。HTTP 状态为“异常”时仍允许提交查询。
+- 历史表格固定十列：记录 ID、设备、车牌号、状态、错误码、错误信息、拍摄时间、开始时间、完成时间和耗时。
+- `Application` 在 `RecognitionApiClient` 和 `SessionService` 之后构造并持有 `HistoryService`，把同一实例注入正式 `MainWindow`/`HistoryPage`。成员声明和销毁顺序必须保证主窗口先销毁并取消页面请求，其后销毁 `HistoryService`，最后才销毁其依赖的 `RecognitionApiClient`、`HttpClient` 和 `SessionService`。
+- TASK-016 不创建 CSV 服务、不显示或接入导出操作；以下 CSV 流程从 TASK-017 开始实现。
 - 导出时将当前筛选条件发送给服务端 CSV 接口。
 - 保存对话框取消时不发起下载。
 - 下载进行中禁用重复导出，但不阻塞页面浏览。
@@ -577,7 +584,10 @@ HTTP 后续首次从 `Abnormal` 恢复为 `Online` 时，只有当前周期仍�
 - MQTT Mock 分别模拟 Broker 暂不可用、认证/授权拒绝、Client ID 拒绝、协议拒绝和订阅失败；TLS Mock 验证证书错误停止重连。
 - `RealtimePage` 验证旧车辆完成不抢占当前图片。
 - 图片测试使用压缩体小于 20 MiB 但宽高或总像素超限的 JPEG/PNG，验证 `QImage` 在线程池生成、`QPixmap` 只在 UI 线程创建。
-- `HistoryPage` 和 `AccessListPage` 验证快速筛选时只应用最后响应。
+- `RecognitionApiClient` 历史测试验证 `+08:00` 半开区间、可选设备参数、固定 `pageSize=100`、响应页匹配、严格信封、10 秒总时限、401、取消和无重试。
+- `HistoryService` 验证新查询取消旧请求，并以会话代次、请求代次、活动句柄和不可变筛选快照共同拒绝旧响应；失败保留最后成功页。
+- `HistoryPage` 验证默认当天、十列表格、搜索/重置、翻页使用最后提交条件、首次及重新显示刷新、切离取消、分页按钮和非阻断错误；`AccessListPage` 验证快速筛选时只应用最后响应。
+- `Application` 启动测试验证同一 `HistoryService` 被持有并注入 `MainWindow`，且主窗口、历史服务及其 HTTP/会话依赖按设计顺序安全销毁。
 - CSV 测试验证固定表头顺序、取消和失败不留下目标文件。
 - 名单超时测试验证精确查询后的成功、失败和未知三种结果。
 

@@ -3,12 +3,19 @@
 #include <QAbstractTableModel>
 
 class RealtimeRecognitionStore;
+class HistoryService;
 
 class RecognitionTableModel final : public QAbstractTableModel
 {
     Q_OBJECT
 
 public:
+    enum class Mode
+    {
+        Realtime,
+        History,
+    };
+
     enum Column
     {
         SequenceColumn,
@@ -19,7 +26,24 @@ public:
         ColumnCount,
     };
 
+    enum HistoryColumn
+    {
+        HistoryRecognitionIdColumn,
+        HistoryDeviceColumn,
+        HistoryPlateColumn,
+        HistoryStatusColumn,
+        HistoryErrorCodeColumn,
+        HistoryErrorMessageColumn,
+        HistoryCapturedAtColumn,
+        HistoryStartedAtColumn,
+        HistoryCompletedAtColumn,
+        HistoryDurationColumn,
+        HistoryColumnCount,
+    };
+
     explicit RecognitionTableModel(RealtimeRecognitionStore *store,
+                                   QObject *parent = nullptr);
+    explicit RecognitionTableModel(HistoryService *historyService,
                                    QObject *parent = nullptr);
 
     [[nodiscard]] int rowCount(const QModelIndex &parent = {}) const override;
@@ -31,7 +55,11 @@ public:
                                       int role = Qt::DisplayRole) const override;
 
     [[nodiscard]] RealtimeRecognitionStore *store() const noexcept;
+    [[nodiscard]] HistoryService *historyService() const noexcept;
+    [[nodiscard]] Mode mode() const noexcept;
 
 private:
-    RealtimeRecognitionStore *store_;
+    Mode mode_;
+    RealtimeRecognitionStore *store_ = nullptr;
+    HistoryService *historyService_ = nullptr;
 };

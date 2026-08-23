@@ -1,5 +1,10 @@
 #include "ui/windows/MainWindow.h"
 
+#include "infrastructure/http/HttpClient.h"
+#include "infrastructure/http/RecognitionApiClient.h"
+#include "services/HistoryService.h"
+#include "services/SessionService.h"
+#include "ui/pages/HistoryPage.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
 
@@ -33,6 +38,7 @@ private slots:
     void titleBarProvidesWindowControls();
     void sidebarRendersConfiguredDarkBackground();
     void navigationOrderDisabledItemsAndPageMapping();
+    void injectedHistoryServiceReplacesOnlyHistoryShell();
     void showsIdentityIndependentStatusesAndBuildInformation();
     void logoutButtonEmitsInteractionSignal();
     void firstShowIsMaximized();
@@ -67,6 +73,29 @@ void MainWindowShellTest::titleBarRendersGradientAndWhiteTitle()
              qPrintable(QStringLiteral("left title color: %1").arg(left.name(QColor::HexArgb))));
     QVERIFY2(colorsAreClose(right, QColor(QStringLiteral("#3C7898"))),
              qPrintable(QStringLiteral("right title color: %1").arg(right.name(QColor::HexArgb))));
+}
+
+void MainWindowShellTest::injectedHistoryServiceReplacesOnlyHistoryShell()
+{
+    SessionService sessions;
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    RecognitionApiClient api(QUrl(QStringLiteral("https://example.test")),
+                             &transport,
+                             &sessions);
+    HistoryService history(&api, &sessions);
+    MainWindow window(QStringLiteral("测试操作员"), nullptr, nullptr, &history);
+
+    QVERIFY(window.realtimePage() == nullptr);
+    QVERIFY(window.historyPage());
+    QCOMPARE(window.historyPage()->historyService(), &history);
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::HistoryPage),
+             window.historyPage());
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::RealtimePage)->objectName(),
+             QStringLiteral("realtimePageShell"));
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::AccessListPage)->objectName(),
+             QStringLiteral("accessListPageShell"));
 }
 
 void MainWindowShellTest::titleBarProvidesWindowControls()

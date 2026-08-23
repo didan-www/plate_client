@@ -717,11 +717,15 @@ TASK-015 已验收。
 
 **实现内容**
 
-- 在 `RecognitionApiClient` 实现历史查询，参数为起止时间、可选设备、页码和固定 `pageSize=100`。
-- 实现 `HistoryService`，保存不可变筛选快照和递增 `requestGeneration`。
-- 实现 `HistoryPage` 的默认北京时间当天、筛选、搜索、重置、上一页和下一页。
-- 表格显示记录 ID、设备、车牌号、状态、错误码/信息、拍摄/开始/完成时间和耗时。
-- 查询失败保留当前表格并显示非阻断错误；旧查询不得覆盖新条件。
+- 在 `RecognitionApiClient` 实现历史查询：时间固定使用 `+08:00` 和 `[startTime, endTime)` 半开区间，可选 `deviceId` 自由文本提交时首尾去空、为空则省略，页码从 1 开始且 `pageSize` 固定为 100。
+- 历史成功响应的 `page` 必须等于请求 `page`，否则返回协议错误并保留原结果；请求使用 10 秒总时限且不自动重试。
+- 实现 `HistoryService`，保存不可变筛选快照和递增 `requestGeneration`。新查询先取消旧请求，完成时同时验证 `sessionGeneration`、`requestGeneration`、活动请求句柄和筛选快照。
+- 实现 `HistoryPage` 的默认北京时间当天 `00:00:00+08:00` 至次日 `00:00:00+08:00`、设备筛选、搜索、重置、上一页和下一页。搜索和重置回到第一页，重置后立即查询；翻页只使用最后已提交筛选，未搜索的编辑值不生效。
+- 历史页首次显示以及每次切离后重新显示时查询或刷新最后已提交条件，切离页面取消在途请求。
+- 表格固定显示十列：记录 ID、设备、车牌号、状态、错误码、错误信息、拍摄时间、开始时间、完成时间和耗时。
+- 取消和旧上下文失效不显示错误；其他查询失败保留当前表格和分页状态并显示非阻断错误。HTTP 状态异常时查询仍可提交。
+- `Application` 持有 `HistoryService` 并注入正式 `MainWindow`/`HistoryPage`，对象声明和销毁顺序保证窗口先于历史服务销毁，历史服务先于 HTTP、识别 API 和会话依赖销毁。
+- TASK-016 不实现 CSV 下载、导出控件或 TASK-017 任何内容。
 
 **预计修改文件**
 
@@ -732,22 +736,31 @@ TASK-015 已验收。
 - `src/ui/pages/HistoryPage.cpp`
 - `src/ui/models/RecognitionTableModel.*`
 - `src/ui/windows/MainWindow.*`
+- `src/app/Application.h`
+- `src/app/Application.cpp`
+- `tests/http/tst_recognition_api_history.cpp`
 - `tests/services/tst_history_service.cpp`
 - `tests/ui/tst_history_page.cpp`
+- `tests/ui/tst_recognition_table_model.cpp`
+- `tests/ui/tst_main_window_shell.cpp`
+- `tests/app/tst_application_startup.cpp`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
 **独立测试**
 
-- 覆盖默认日期、设备可选、总数、第一页/末页和空结果。
-- 延迟返回多次快速筛选响应，验证只有最后代次更新 UI。
-- 覆盖 4xx、5xx、10 秒超时、取消和非法分页 DTO。
+- HTTP API 覆盖固定 `+08:00`、半开区间、设备首尾去空及省略、URL 编码、固定 `pageSize=100`、Bearer Token、响应页不匹配、严格信封、4xx、5xx、10 秒超时、401、取消和无重试。
+- 服务覆盖默认日期、不可变筛选、总数、第一页/末页、空结果，以及新查询、切离页面、会话失效和销毁时取消在途请求。
+- 延迟返回多次快速筛选响应，验证只有同时匹配会话代次、请求代次、活动句柄和筛选快照的最后响应更新 UI。
+- 页面覆盖搜索/重置回到第一页、重置立即查询、翻页忽略未提交编辑值、首次及重新显示刷新、十列表格、分页按钮和失败保留旧表格。
+- Application 启动测试覆盖 `HistoryService` 的持有、注入和销毁安全；MainWindow 与表格模型回归保持实时页面既有行为。
 
 **验收标准**
 
 - 历史数据全部来自 HTTP，不创建本地业务副本或 SQLite。
-- 页码、总数和按钮状态与服务端 `PageResult` 一致。
+- 页码、总数和按钮状态与通过页码匹配校验的服务端 `PageResult` 一致。
 - HTTP 状态异常时查询按钮仍可使用，结果按实际响应处理。
+- TASK-016 范围中不存在 CSV 请求、保存或导出 UI。
 
 ### TASK-017 实现 CSV 下载和原子保存
 

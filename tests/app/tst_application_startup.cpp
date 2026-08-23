@@ -3,12 +3,14 @@
 #include "app/AppController.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
 #include "services/ImageLoadService.h"
+#include "services/HistoryService.h"
 #include "services/RealtimeRecognitionStore.h"
 #include "support/MockHttpServer.h"
 #include "support/MockMqttClient.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
 #include "ui/pages/RealtimePage.h"
+#include "ui/pages/HistoryPage.h"
 #include "ui/windows/LoginWindow.h"
 #include "ui/windows/MainWindow.h"
 
@@ -225,8 +227,10 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     auto *window = qobject_cast<MainWindow *>(runtime->controller()->authenticatedWindow());
     QVERIFY(window);
     QVERIFY(window->realtimePage());
+    QVERIFY(window->historyPage());
     QCOMPARE(window->realtimePage()->store(), runtime->realtimeStore());
     QCOMPARE(window->realtimePage()->imageLoadService(), runtime->imageLoadService());
+    QCOMPARE(window->historyPage()->historyService(), runtime->historyService());
     QCOMPARE(server.requests().at(1).target,
              QByteArrayLiteral("/api/v1/clients/heartbeat"));
     QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
@@ -286,15 +290,21 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     QStringList destructionOrder;
     QPointer<MainWindow> guardedWindow(window);
     QPointer<ImageLoadService> guardedImages(runtime->imageLoadService());
+    QPointer<HistoryService> guardedHistory(runtime->historyService());
     connect(window, &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("window")); });
     connect(runtime->imageLoadService(), &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("images")); });
+    connect(runtime->historyService(), &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("history")); });
     runtime.reset();
     QVERIFY(guardedWindow.isNull());
     QVERIFY(guardedImages.isNull());
+    QVERIFY(guardedHistory.isNull());
     QCOMPARE(destructionOrder,
-             QStringList({QStringLiteral("window"), QStringLiteral("images")}));
+             QStringList({QStringLiteral("window"),
+                          QStringLiteral("history"),
+                          QStringLiteral("images")}));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

@@ -1,7 +1,10 @@
 #include "domain/RecognitionSnapshot.h"
 #include "domain/SessionContext.h"
 #include "services/RealtimeRecognitionStore.h"
+#include "services/HistoryService.h"
 #include "services/SessionService.h"
+#include "infrastructure/http/HttpClient.h"
+#include "infrastructure/http/RecognitionApiClient.h"
 #include "ui/models/RecognitionTableModel.h"
 
 #include <QSignalSpy>
@@ -60,6 +63,7 @@ private slots:
     void exposesFixedReadOnlyFiveColumnContract();
     void mapsStoreItemsAndCapturedTime();
     void followsUpdatesAndStoreLimitWithoutCopyingItems();
+    void exposesHistoryTenColumnContractWithoutBusinessCopy();
 };
 
 void RecognitionTableModelTest::exposesFixedReadOnlyFiveColumnContract()
@@ -83,6 +87,35 @@ void RecognitionTableModelTest::exposesFixedReadOnlyFiveColumnContract()
                  expectedHeaders.at(column));
     }
     QVERIFY(!model.index(0, 0).isValid());
+}
+
+void RecognitionTableModelTest::exposesHistoryTenColumnContractWithoutBusinessCopy()
+{
+    SessionService sessions;
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    RecognitionApiClient api(QUrl(QStringLiteral("https://example.test")),
+                             &transport,
+                             &sessions);
+    HistoryService history(&api, &sessions);
+    RecognitionTableModel model(&history);
+
+    QCOMPARE(model.mode(), RecognitionTableModel::Mode::History);
+    QCOMPARE(model.historyService(), &history);
+    QVERIFY(model.store() == nullptr);
+    QCOMPARE(model.rowCount(), 0);
+    QCOMPARE(model.columnCount(), 10);
+    const QStringList expectedHeaders {
+        QStringLiteral("记录 ID"), QStringLiteral("设备"), QStringLiteral("车牌号"),
+        QStringLiteral("状态"), QStringLiteral("错误码"), QStringLiteral("错误信息"),
+        QStringLiteral("拍摄时间"), QStringLiteral("开始时间"),
+        QStringLiteral("完成时间"), QStringLiteral("耗时"),
+    };
+    for (int column = 0; column < expectedHeaders.size(); ++column) {
+        QCOMPARE(model.headerData(column, Qt::Horizontal).toString(),
+                 expectedHeaders.at(column));
+    }
 }
 
 void RecognitionTableModelTest::mapsStoreItemsAndCapturedTime()

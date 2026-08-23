@@ -1,10 +1,12 @@
 #pragma once
 
 #include "domain/Errors.h"
+#include "domain/PageResult.h"
 #include "domain/RecognitionSnapshot.h"
 #include "domain/RequestContext.h"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -132,6 +134,35 @@ private:
     bool completed_ = false;
 };
 
+class RecognitionHistoryRequestHandle final : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit RecognitionHistoryRequestHandle(RequestContext context,
+                                             QObject *parent = nullptr);
+    ~RecognitionHistoryRequestHandle() override;
+
+    void cancel();
+    [[nodiscard]] const RequestContext &context() const noexcept;
+    [[nodiscard]] const std::optional<PageResult<RecognitionSnapshot>> &page() const noexcept;
+
+signals:
+    void succeeded();
+    void failed(const RecognitionApiError &error);
+    void finished();
+
+private:
+    friend class RecognitionApiClient;
+    void completeSuccess(PageResult<RecognitionSnapshot> page);
+    void completeFailure(RecognitionApiError error);
+
+    RequestContext context_;
+    QPointer<HttpRequestHandle> transportHandle_;
+    std::optional<PageResult<RecognitionSnapshot>> page_;
+    bool completed_ = false;
+};
+
 class RecognitionApiClient final : public QObject
 {
     Q_OBJECT
@@ -148,10 +179,21 @@ public:
         const QString &recognitionId,
         quint64 sessionGeneration,
         quint64 requestGeneration);
+    [[nodiscard]] RecognitionHistoryRequestHandle *getHistory(
+        const QDateTime &startTime,
+        const QDateTime &endTime,
+        const QString &deviceId,
+        int page,
+        quint64 sessionGeneration,
+        quint64 requestGeneration);
 
 private:
     [[nodiscard]] QUrl detailEndpoint(const QString &recognitionId) const;
     [[nodiscard]] QUrl imageEndpoint(const QString &recognitionId) const;
+    [[nodiscard]] QUrl historyEndpoint(const QString &startTime,
+                                       const QString &endTime,
+                                       const QString &deviceId,
+                                       int page) const;
 
     QUrl loginBaseUrl_;
     HttpClient *httpClient_;

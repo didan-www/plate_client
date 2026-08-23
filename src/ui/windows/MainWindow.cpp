@@ -1,6 +1,7 @@
 #include "ui/windows/MainWindow.h"
 
 #include "ui/pages/RealtimePage.h"
+#include "ui/pages/HistoryPage.h"
 #include "ui/widgets/NavigationSidebar.h"
 
 #include <QApplication>
@@ -173,13 +174,22 @@ QWidget *createPageShell(const QString &objectName, const QString &title)
 } // namespace
 
 MainWindow::MainWindow(const QString &displayName, QWidget *parent)
-    : MainWindow(displayName, nullptr, nullptr, parent)
+    : MainWindow(displayName, nullptr, nullptr, nullptr, parent)
 {
 }
 
 MainWindow::MainWindow(const QString &displayName,
                        RealtimeRecognitionStore *realtimeStore,
                        ImageLoadService *imageLoadService,
+                       QWidget *parent)
+    : MainWindow(displayName, realtimeStore, imageLoadService, nullptr, parent)
+{
+}
+
+MainWindow::MainWindow(const QString &displayName,
+                       RealtimeRecognitionStore *realtimeStore,
+                       ImageLoadService *imageLoadService,
+                       HistoryService *historyService,
                        QWidget *parent)
     : QMainWindow(parent)
     , sidebar_(new NavigationSidebar(displayName,
@@ -203,8 +213,13 @@ MainWindow::MainWindow(const QString &displayName,
         pageStack_->addWidget(createPageShell(QStringLiteral("realtimePageShell"),
                                               QStringLiteral("实时监控")));
     }
-    pageStack_->addWidget(createPageShell(QStringLiteral("historyPageShell"),
-                                          QStringLiteral("日志记录")));
+    if (historyService) {
+        historyPage_ = new HistoryPage(historyService, pageStack_);
+        pageStack_->addWidget(historyPage_);
+    } else {
+        pageStack_->addWidget(createPageShell(QStringLiteral("historyPageShell"),
+                                              QStringLiteral("日志记录")));
+    }
     pageStack_->addWidget(createPageShell(QStringLiteral("accessListPageShell"),
                                           QStringLiteral("黑白名单管理")));
     pageStack_->setCurrentIndex(NavigationSidebar::RealtimePage);
@@ -292,6 +307,11 @@ QStackedWidget *MainWindow::pageStack() const noexcept
 RealtimePage *MainWindow::realtimePage() const noexcept
 {
     return realtimePage_;
+}
+
+HistoryPage *MainWindow::historyPage() const noexcept
+{
+    return historyPage_;
 }
 
 bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)

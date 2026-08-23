@@ -91,11 +91,19 @@ add_library(
 )
 
 add_library(
+    plate_client_history STATIC
+    services/HistoryService.h
+    services/HistoryService.cpp
+)
+
+add_library(
     plate_client_ui STATIC
     ui/models/RecognitionTableModel.h
     ui/models/RecognitionTableModel.cpp
     ui/pages/RealtimePage.h
     ui/pages/RealtimePage.cpp
+    ui/pages/HistoryPage.h
+    ui/pages/HistoryPage.cpp
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
     ui/widgets/NavigationSidebar.h
@@ -176,10 +184,28 @@ target_include_directories(
 target_link_libraries(
     plate_client_ui
     PUBLIC
+        plate_client_history
         plate_client_mqtt
         plate_client_realtime
         plate_client_reconciliation
         Qt6::Widgets
+)
+
+plate_client_apply_project_options(plate_client_history)
+
+target_include_directories(
+    plate_client_history
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(
+    plate_client_history
+    PUBLIC
+        plate_client_auth
+        plate_client_reconciliation
+        plate_client_protocol
+        Qt6::Core
 )
 
 plate_client_apply_project_options(plate_client_mqtt)

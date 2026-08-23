@@ -6,6 +6,7 @@
 #include "services/SessionService.h"
 
 #include <QTimer>
+#include <QUrlQuery>
 
 #include <algorithm>
 #include <utility>
@@ -120,6 +121,12 @@ std::optional<QByteArray> declaredImageFormat(const HttpResponse &response)
         return QByteArrayLiteral("png");
     }
     return std::nullopt;
+}
+
+QString historyTime(const QDateTime &value)
+{
+    return value.toOffsetFromUtc(8 * 60 * 60)
+               .toString(QStringLiteral("yyyy-MM-dd'T'HH:mm:ss.zzz+08:00"));
 }
 } // namespace
 
@@ -339,6 +346,66 @@ void RecognitionImageRequestHandle::completeFailure(RecognitionApiError error)
     }
 }
 
+RecognitionHistoryRequestHandle::RecognitionHistoryRequestHandle(RequestContext context,
+                                                                 QObject *parent)
+    : QObject(parent)
+    , context_(std::move(context))
+{
+}
+
+RecognitionHistoryRequestHandle::~RecognitionHistoryRequestHandle()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+void RecognitionHistoryRequestHandle::cancel()
+{
+    if (transportHandle_) {
+        transportHandle_->cancel();
+    }
+}
+
+const RequestContext &RecognitionHistoryRequestHandle::context() const noexcept
+{
+    return context_;
+}
+
+const std::optional<PageResult<RecognitionSnapshot>> &
+RecognitionHistoryRequestHandle::page() const noexcept
+{
+    return page_;
+}
+
+void RecognitionHistoryRequestHandle::completeSuccess(
+    PageResult<RecognitionSnapshot> page)
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    page_.emplace(std::move(page));
+    QPointer<RecognitionHistoryRequestHandle> guarded(this);
+    emit succeeded();
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
+void RecognitionHistoryRequestHandle::completeFailure(RecognitionApiError error)
+{
+    if (completed_) {
+        return;
+    }
+    completed_ = true;
+    QPointer<RecognitionHistoryRequestHandle> guarded(this);
+    emit failed(error);
+    if (guarded) {
+        emit guarded->finished();
+    }
+}
+
 RecognitionImageRequestHandle *RecognitionApiClient::getImage(
     const QString &recognitionId,
     quint64 sessionGeneration,
@@ -407,6 +474,111 @@ RecognitionImageRequestHandle *RecognitionApiClient::getImage(
     return handle;
 }
 
+RecognitionHistoryRequestHandle *RecognitionApiClient::getHistory(
+    const QDateTime &startTime,
+    const QDateTime &endTime,
+    const QString &deviceId,
+    int page,
+    quint64 sessionGeneration,
+    quint64 requestGeneration)
+{
+    const QString normalizedStart = historyTime(startTime);
+    const QString normalizedEnd = historyTime(endTime);
+    const QString normalizedDevice = deviceId.trimmed();
+    QVariantMap filterSnapshot {
+        {QStringLiteral("startTime"), normalizedStart},
+        {QStringLiteral("endTime"), normalizedEnd},
+        {QStringLiteral("deviceId"), normalizedDevice},
+        {QStringLiteral("page"), page},
+        {QStringLiteral("pageSize"), 100},
+    };
+    const RequestContext context(sessionGeneration,
+                                 requestGeneration,
+                                 QStringLiteral("recognition.history"),
+                                 std::nullopt,
+                                 std::move(filterSnapshot));
+    auto *handle = new RecognitionHistoryRequestHandle(context, this);
+    connect(handle, &RecognitionHistoryRequestHandle::finished,
+            handle, &QObject::deleteLater);
+
+    QString accessToken;
+    const bool hasToken = sessionService_->withAccessToken(
+        sessionGeneration,
+        [&accessToken](const QString &token) { accessToken = token; });
+    const bool invalidRequest = !startTime.isValid() || !endTime.isValid()
+                                || startTime >= endTime || page < 1
+                                || sessionGeneration == 0 || requestGeneration == 0;
+    if (invalidRequest || !hasToken) {
+        QTimer::singleShot(0, handle, [handle, invalidRequest] {
+            handle->completeFailure(RecognitionApiError(
+                invalidRequest ? RecognitionApiErrorCode::InvalidRequest
+                               : RecognitionApiErrorCode::StaleResponse,
+                invalidRequest ? QStringLiteral("历史查询条件无效。")
+                               : QStringLiteral("历史查询会话已经失效。")));
+        });
+        return handle;
+    }
+
+    HttpRequest request(HttpMethod::Get,
+                        historyEndpoint(normalizedStart,
+                                        normalizedEnd,
+                                        normalizedDevice,
+                                        page),
+                        HttpRequestKind::Query,
+                        HttpResponseMode::JsonMemory,
+                        context,
+                        {},
+                        std::move(accessToken));
+    HttpRequestHandle *transport = httpClient_->send(std::move(request));
+    handle->transportHandle_ = transport;
+    connect(transport, &HttpRequestHandle::succeeded, handle,
+            [handle, page](const HttpResponse &response) {
+                if (handle->completed_) {
+                    return;
+                }
+                auto decoded = JsonCodecs::decodeRecognitionPageEnvelope(response.body());
+                if (!decoded.isSuccess()) {
+                    handle->completeFailure(protocolFailure(*decoded.error(),
+                                                            response.statusCode()));
+                    return;
+                }
+                auto envelope = decoded.takeValue();
+                if (!envelope || !envelope->success() || !envelope->data().has_value()) {
+                    handle->completeFailure(RecognitionApiError(
+                        RecognitionApiErrorCode::ProtocolError,
+                        QStringLiteral("历史查询成功响应不符合统一信封。"),
+                        envelope ? envelope->code() : QString {},
+                        envelope ? envelope->requestId() : QString {},
+                        response.statusCode()));
+                    return;
+                }
+                std::optional<PageResult<RecognitionSnapshot>> result = envelope->takeData();
+                if (!result || result->page() != page) {
+                    handle->completeFailure(RecognitionApiError(
+                        RecognitionApiErrorCode::ProtocolError,
+                        QStringLiteral("历史查询响应页码与请求不匹配。"),
+                        {},
+                        envelope->requestId(),
+                        response.statusCode(),
+                        ProtocolError(ProtocolErrorCode::InvalidCombination,
+                                      QStringLiteral("$.data.page"),
+                                      QStringLiteral("响应页码与请求页码不一致。"))));
+                    return;
+                }
+                handle->completeSuccess(std::move(*result));
+            });
+    connect(transport, &HttpRequestHandle::failed, handle,
+            [this, handle](const HttpError &error, const HttpResponse &response) {
+                if (error.httpStatus() == 401) {
+                    sessionService_->handleUnauthorized(
+                        response.context().sessionGeneration());
+                }
+                handle->completeFailure(mapTransportFailure(
+                    error, response, QStringLiteral("历史查询")));
+            });
+    return handle;
+}
+
 QUrl RecognitionApiClient::detailEndpoint(const QString &recognitionId) const
 {
     QUrl result = loginBaseUrl_;
@@ -431,5 +603,28 @@ QUrl RecognitionApiClient::imageEndpoint(const QString &recognitionId) const
     result.setPath(prefix + QStringLiteral("/api/v1/recognitions/") + encodedId
                        + QStringLiteral("/image"),
                    QUrl::TolerantMode);
+    return result;
+}
+
+QUrl RecognitionApiClient::historyEndpoint(const QString &startTime,
+                                           const QString &endTime,
+                                           const QString &deviceId,
+                                           int page) const
+{
+    QUrl result = loginBaseUrl_;
+    QString prefix = result.path();
+    if (prefix.endsWith(QLatin1Char('/'))) {
+        prefix.chop(1);
+    }
+    result.setPath(prefix + QStringLiteral("/api/v1/recognitions"));
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("startTime"), startTime);
+    query.addQueryItem(QStringLiteral("endTime"), endTime);
+    if (!deviceId.isEmpty()) {
+        query.addQueryItem(QStringLiteral("deviceId"), deviceId);
+    }
+    query.addQueryItem(QStringLiteral("page"), QString::number(page));
+    query.addQueryItem(QStringLiteral("pageSize"), QStringLiteral("100"));
+    result.setQuery(query);
     return result;
 }
