@@ -4,7 +4,7 @@
 
 系统由嵌入式端、Linux 服务端和 Qt 管理端组成。车辆图片的保存、模型识别、MySQL 日志以及向嵌入式端发布放行结果均由 Linux 服务端负责；Qt 客户端不执行识别，只负责实时监控、历史查询和业务配置管理。
 
-> 当前状态：TASK-021 已完成，当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输、内存认证会话服务、工业蓝自绘标题栏登录界面、正式主窗口、登录后 30 秒心跳、独立的 HTTP 状态与 MQTT 3.1.1 连接状态机、严格识别事件解析和本次会话最近 100 条实时记录存储、识别详情查询、仅针对当前 `PROCESSING` 记录的 MQTT 断线重连校准、安全图片下载、受限重试和线程池异步解码、实时监控页面闭环、按北京时间和设备筛选且固定每页 100 条的严格历史日志查询、基于最后已提交筛选的 120 秒流式 CSV 下载和 `QSaveFile` 原子保存、完整的黑白名单浏览、搜索、新增、删除、分页、写超时精确核实和空页回退页面闭环、退出关闭统一异步清理，以及覆盖实时、历史、CSV、名单和 HTTP/MQTT 独立故障的端到端集成测试。
+> 当前状态：TASK-022 已完成，REQ-001 Qt 客户端首版开发任务已全部验收。当前包含 Qt Widgets 构建基线、严格引导配置、脱敏技术日志、领域协议、异步 HTTP 传输、内存认证会话服务、工业蓝自绘标题栏登录界面、正式主窗口、登录后 30 秒心跳、独立的 HTTP 状态与 MQTT 3.1.1 连接状态机、严格识别事件解析和本次会话最近 100 条实时记录存储、识别详情查询、仅针对当前 `PROCESSING` 记录的 MQTT 断线重连校准、安全图片下载、受限重试和线程池异步解码、实时监控页面闭环、按北京时间和设备筛选且固定每页 100 条的严格历史日志查询、基于最后已提交筛选的 120 秒流式 CSV 下载和 `QSaveFile` 原子保存、完整的黑白名单浏览、搜索、新增、删除、分页、写超时精确核实和空页回退页面闭环、退出关闭统一异步清理，以及端到端集成、持续吞吐、目标分辨率/DPI 和本地数据安全边界测试。
 
 ## 系统职责
 
@@ -163,3 +163,20 @@ D:\Qt\Tools\CMake_64\bin\ctest.exe --preset mingw-debug
 `mingw-debug` Preset 生成 Debug 构建到 `build/mingw-debug`。构建时会把示例配置复制为构建目录中受忽略的 `src/config/client.json`，仅用于当前开发构建和 `app.startup`，不会提交真实配置。测试 Preset 会设置 Qt 和项目本地 Qt MQTT 的运行时路径，并使用 Qt offscreen 平台运行全部测试；登录窗口也已在 Windows 桌面环境验证可显示和正常关闭。
 
 TASK-021 验收已从全新 Debug 和 Release 构建目录分别完成 `266/266` 构建步骤，并在两种配置下分别通过全部 `56/56` 项 CTest；四个端到端集成测试目标在 Debug 和 Release 配置下各并发连续通过 20 轮（每种配置 `80/80`），名单闭环集成测试在 Debug 配置下串行连续通过 100 轮。
+
+TASK-022 最终验收在 Windows、Qt 6.11.1、MinGW-w64 GCC 13.1.0、CMake 3.30.5 和 Ninja 1.12.1 环境，从全新的 `build/task022-clean-debug` 和 `build/task022-clean-release` 目录分别完成 `280/280` 构建步骤。Debug 与 Release 均通过全部 `61/61` 项 CTest；两次全量测试中的真实每秒 1 条事件吞吐场景分别持续 101.27 秒和 101.19 秒，列表始终不超过 100 条且事件循环保持响应。以下是本次实际执行的干净构建和全量测试命令：
+
+```powershell
+D:\Qt\Tools\CMake_64\bin\cmake.exe -S . -B build/task022-clean-debug -G Ninja `
+  -DCMAKE_BUILD_TYPE=Debug `
+  -DCMAKE_CXX_COMPILER=D:/Qt/Tools/mingw1310_64/bin/g++.exe `
+  -DCMAKE_MAKE_PROGRAM=D:/Qt/Tools/Ninja/ninja.exe `
+  -DCMAKE_PREFIX_PATH=D:/Qt/6.11.1/mingw_64
+D:\Qt\Tools\CMake_64\bin\cmake.exe --build build/task022-clean-debug -j 4
+
+$env:PATH = "$PWD\.deps\install\qtmqtt\bin;D:\Qt\6.11.1\mingw_64\bin;D:\Qt\Tools\mingw1310_64\bin;$env:PATH"
+$env:QT_QPA_PLATFORM = "offscreen"
+D:\Qt\Tools\CMake_64\bin\ctest.exe --test-dir build/task022-clean-debug --output-on-failure -j 4
+```
+
+Release 验收使用相同工具链参数，将构建目录改为 `build/task022-clean-release` 并设置 `-DCMAKE_BUILD_TYPE=Release`。三档 `QT_SCALE_FACTOR=1/1.5/2` 的响应式场景覆盖 1366x768、1920x1080 和 3840x2160，验证登录、实时、历史和名单页面；三档 UI 与安全边界测试并发重复 20 轮共 `80/80` 次通过，四个端到端集成测试并发重复 20 轮共 `80/80` 次通过。安全审计确认应用运行目录和用户数据目录中无 SQLite、MySQL 驱动、车辆图片或 CSV 业务缓存，生产源码未启用 `Qt Sql` 或网络磁盘缓存，临时日志中的 Token、密码、MQTT 凭据、完整载荷和图片内容均被脱敏或省略。

@@ -272,6 +272,26 @@ add_executable(
     support/MockMqttClient.h
 )
 
+add_executable(
+    tst_realtime_throughput
+    performance/tst_realtime_throughput.cpp
+)
+
+add_executable(
+    tst_responsive_layout
+    ui/tst_responsive_layout.cpp
+    integration/MockPlateServer.h
+    integration/MockPlateServer.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
+    tst_local_data_boundary
+    security/tst_local_data_boundary.cpp
+)
+
 plate_client_apply_project_options(tst_smoke)
 plate_client_apply_project_options(tst_bootstrap_config)
 plate_client_apply_project_options(tst_technical_logger)
@@ -313,6 +333,9 @@ plate_client_apply_project_options(tst_integration_realtime_flow)
 plate_client_apply_project_options(tst_integration_history_and_csv_flow)
 plate_client_apply_project_options(tst_integration_access_list_flow)
 plate_client_apply_project_options(tst_integration_independent_connectivity)
+plate_client_apply_project_options(tst_realtime_throughput)
+plate_client_apply_project_options(tst_responsive_layout)
+plate_client_apply_project_options(tst_local_data_boundary)
 
 target_link_libraries(
     tst_smoke
@@ -663,6 +686,39 @@ foreach(target
     )
 endforeach()
 
+target_link_libraries(
+    tst_realtime_throughput
+    PRIVATE
+        plate_client_ui
+        Qt6::Test
+)
+
+target_include_directories(tst_responsive_layout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_responsive_layout
+    PRIVATE
+        plate_client_app
+        Qt6::Network
+        Qt6::Test
+)
+
+target_link_libraries(
+    tst_local_data_boundary
+    PRIVATE
+        plate_client_logging
+        Qt6::Test
+)
+
+target_compile_definitions(
+    tst_local_data_boundary
+    PRIVATE
+        PLATE_CLIENT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        PLATE_CLIENT_APP_PATH="$<TARGET_FILE:plate_client>"
+)
+
+add_dependencies(tst_local_data_boundary plate_client)
+
 add_test(NAME unit.smoke COMMAND tst_smoke)
 add_test(NAME unit.bootstrap_config COMMAND tst_bootstrap_config)
 add_test(NAME unit.technical_logger COMMAND tst_technical_logger)
@@ -719,6 +775,11 @@ add_test(NAME integration.realtime_flow COMMAND tst_integration_realtime_flow)
 add_test(NAME integration.history_and_csv_flow COMMAND tst_integration_history_and_csv_flow)
 add_test(NAME integration.access_list_flow COMMAND tst_integration_access_list_flow)
 add_test(NAME integration.independent_connectivity COMMAND tst_integration_independent_connectivity)
+add_test(NAME performance.realtime_throughput COMMAND tst_realtime_throughput)
+add_test(NAME ui.responsive_layout.dpi100 COMMAND tst_responsive_layout)
+add_test(NAME ui.responsive_layout.dpi150 COMMAND tst_responsive_layout)
+add_test(NAME ui.responsive_layout.dpi200 COMMAND tst_responsive_layout)
+add_test(NAME security.local_data_boundary COMMAND tst_local_data_boundary)
 
 set_tests_properties(
     unit.smoke
@@ -792,11 +853,36 @@ set_tests_properties(
 )
 
 set_tests_properties(
+    performance.realtime_throughput
+    PROPERTIES
+        LABELS performance
+        RUN_SERIAL TRUE
+        TIMEOUT 125
+)
+
+set_tests_properties(
+    ui.responsive_layout.dpi100
+    ui.responsive_layout.dpi150
+    ui.responsive_layout.dpi200
+    PROPERTIES
+        LABELS ui-acceptance
+        TIMEOUT 30
+)
+
+set_tests_properties(
+    security.local_data_boundary
+    PROPERTIES
+        LABELS security
+        TIMEOUT 10
+)
+
+set_tests_properties(
     unit.login_window.dpi100
     unit.main_window_shell.dpi100
     unit.realtime_page.dpi100
     unit.history_page.dpi100
     unit.access_list_page.dpi100
+    ui.responsive_layout.dpi100
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1"
 )
 
@@ -806,6 +892,7 @@ set_tests_properties(
     unit.realtime_page.dpi150
     unit.history_page.dpi150
     unit.access_list_page.dpi150
+    ui.responsive_layout.dpi150
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1.5"
 )
 
@@ -815,5 +902,6 @@ set_tests_properties(
     unit.realtime_page.dpi200
     unit.history_page.dpi200
     unit.access_list_page.dpi200
+    ui.responsive_layout.dpi200
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=2"
 )
