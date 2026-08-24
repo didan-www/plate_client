@@ -3,6 +3,8 @@
 #include <QMainWindow>
 
 class QByteArray;
+class AccessListPage;
+class AccessListService;
 class CsvDownloadService;
 class ImageLoadService;
 class HistoryPage;
@@ -34,11 +36,19 @@ public:
                HistoryService *historyService,
                CsvDownloadService *csvDownloadService,
                QWidget *parent = nullptr);
+    MainWindow(const QString &displayName,
+               RealtimeRecognitionStore *realtimeStore,
+               ImageLoadService *imageLoadService,
+               HistoryService *historyService,
+               CsvDownloadService *csvDownloadService,
+               AccessListService *accessListService,
+               QWidget *parent = nullptr);
 
     [[nodiscard]] NavigationSidebar *sidebar() const noexcept;
     [[nodiscard]] QStackedWidget *pageStack() const noexcept;
     [[nodiscard]] RealtimePage *realtimePage() const noexcept;
     [[nodiscard]] HistoryPage *historyPage() const noexcept;
+    [[nodiscard]] AccessListPage *accessListPage() const noexcept;
 
 signals:
     void logoutRequested();
@@ -52,5 +62,6 @@ private:
     QStackedWidget *pageStack_;
     RealtimePage *realtimePage_ = nullptr;
     HistoryPage *historyPage_ = nullptr;
+    AccessListPage *accessListPage_ = nullptr;
     bool firstShow_ = true;
 };

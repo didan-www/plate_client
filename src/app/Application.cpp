@@ -2,6 +2,7 @@
 
 #include "infrastructure/config/BootstrapConfigLoader.h"
 #include "infrastructure/http/AuthApiClient.h"
+#include "infrastructure/http/AccessListApiClient.h"
 #include "infrastructure/http/HeartbeatApiClient.h"
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/http/RecognitionApiClient.h"
@@ -10,6 +11,7 @@
 #include "infrastructure/mqtt/RecognitionEventCodec.h"
 #include "domain/RequestContext.h"
 #include "services/HeartbeatService.h"
+#include "services/AccessListService.h"
 #include "services/CsvDownloadService.h"
 #include "services/ImageLoadService.h"
 #include "services/HistoryService.h"
@@ -84,6 +86,16 @@ CsvDownloadService *Application::csvDownloadService() const noexcept
     return csvDownloadService_.get();
 }
 
+AccessListService *Application::accessListService() const noexcept
+{
+    return accessListService_.get();
+}
+
+AccessListApiClient *Application::accessListApiClient() const noexcept
+{
+    return accessListApiClient_.get();
+}
+
 bool Application::runtimeInitialized() const noexcept
 {
     return controller_ != nullptr;
@@ -119,6 +131,9 @@ bool Application::initialize(BootstrapConfigLoadResult result)
     recognitionApiClient_ = std::make_unique<RecognitionApiClient>(config.loginBaseUrl(),
                                                                    httpClient_.get(),
                                                                    sessionService_.get());
+    accessListApiClient_ = std::make_unique<AccessListApiClient>(config.loginBaseUrl(),
+                                                                 httpClient_.get(),
+                                                                 sessionService_.get());
     heartbeatService_ = std::make_unique<HeartbeatService>(heartbeatApiClient_.get(),
                                                            httpClient_.get(),
                                                            sessionService_.get());
@@ -145,6 +160,8 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                                        sessionService_.get());
     csvDownloadService_ = std::make_unique<CsvDownloadService>(recognitionApiClient_.get(),
                                                                sessionService_.get());
+    accessListService_ = std::make_unique<AccessListService>(accessListApiClient_.get(),
+                                                             sessionService_.get());
     QObject::connect(
         mqttSubscriber_.get(), &MqttRecognitionSubscriber::eventPayloadReceived,
         realtimeStore_.get(),
@@ -163,13 +180,15 @@ bool Application::initialize(BootstrapConfigLoadResult result)
                                        realtimeStore = realtimeStore_.get(),
                                        imageLoadService = imageLoadService_.get(),
                                        historyService = historyService_.get(),
-                                       csvDownloadService = csvDownloadService_.get()](
+                                       csvDownloadService = csvDownloadService_.get(),
+                                       accessListService = accessListService_.get()](
                                           const QString &displayName) {
             auto *window = new MainWindow(displayName,
                                           realtimeStore,
                                           imageLoadService,
                                           historyService,
-                                          csvDownloadService);
+                                          csvDownloadService,
+                                          accessListService);
             window->sidebar()->setHttpConnectivityState(heartbeat->state());
             window->sidebar()->setMqttConnectivityState(mqtt->state(), mqtt->statusReason());
             QObject::connect(heartbeat, &HeartbeatService::stateChanged,

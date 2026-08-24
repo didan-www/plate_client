@@ -1,11 +1,14 @@
 #include "ui/windows/MainWindow.h"
 
+#include "infrastructure/http/AccessListApiClient.h"
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/http/RecognitionApiClient.h"
 #include "services/CsvDownloadService.h"
+#include "services/AccessListService.h"
 #include "services/HistoryService.h"
 #include "services/SessionService.h"
 #include "ui/pages/HistoryPage.h"
+#include "ui/pages/AccessListPage.h"
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
 
@@ -41,6 +44,7 @@ private slots:
     void navigationOrderDisabledItemsAndPageMapping();
     void injectedHistoryServiceReplacesOnlyHistoryShell();
     void injectedCsvServiceEnablesHistoryExport();
+    void injectedAccessListServiceReplacesOnlyAccessListShell();
     void showsIdentityIndependentStatusesAndBuildInformation();
     void logoutButtonEmitsInteractionSignal();
     void firstShowIsMaximized();
@@ -122,6 +126,35 @@ void MainWindowShellTest::injectedCsvServiceEnablesHistoryExport()
     QCOMPARE(window.historyPage()->csvDownloadService(), &csv);
     QVERIFY(window.historyPage()->findChild<QPushButton *>(
         QStringLiteral("historyExportButton")));
+}
+
+void MainWindowShellTest::injectedAccessListServiceReplacesOnlyAccessListShell()
+{
+    SessionService sessions;
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    AccessListApiClient api(QUrl(QStringLiteral("https://example.test")),
+                            &transport,
+                            &sessions);
+    AccessListService accessLists(&api, &sessions);
+    MainWindow window(QStringLiteral("测试操作员"),
+                      nullptr,
+                      nullptr,
+                      nullptr,
+                      nullptr,
+                      &accessLists);
+
+    QVERIFY(window.realtimePage() == nullptr);
+    QVERIFY(window.historyPage() == nullptr);
+    QVERIFY(window.accessListPage());
+    QCOMPARE(window.accessListPage()->service(), &accessLists);
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::AccessListPage),
+             window.accessListPage());
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::RealtimePage)->objectName(),
+             QStringLiteral("realtimePageShell"));
+    QCOMPARE(window.pageStack()->widget(NavigationSidebar::HistoryPage)->objectName(),
+             QStringLiteral("historyPageShell"));
 }
 
 void MainWindowShellTest::titleBarProvidesWindowControls()

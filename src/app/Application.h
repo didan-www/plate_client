@@ -8,6 +8,8 @@
 #include <memory>
 
 class AuthApiClient;
+class AccessListApiClient;
+class AccessListService;
 class CsvDownloadService;
 class HeartbeatApiClient;
 class HeartbeatService;
@@ -48,6 +50,8 @@ public:
     [[nodiscard]] ImageLoadService *imageLoadService() const noexcept;
     [[nodiscard]] HistoryService *historyService() const noexcept;
     [[nodiscard]] CsvDownloadService *csvDownloadService() const noexcept;
+    [[nodiscard]] AccessListService *accessListService() const noexcept;
+    [[nodiscard]] AccessListApiClient *accessListApiClient() const noexcept;
     [[nodiscard]] bool runtimeInitialized() const noexcept;
 
 private:
@@ -62,6 +66,7 @@ private:
     std::unique_ptr<AuthApiClient> authApiClient_;
     std::unique_ptr<HeartbeatApiClient> heartbeatApiClient_;
     std::unique_ptr<RecognitionApiClient> recognitionApiClient_;
+    std::unique_ptr<AccessListApiClient> accessListApiClient_;
     std::unique_ptr<HeartbeatService> heartbeatService_;
     std::unique_ptr<MqttRecognitionSubscriber> mqttSubscriber_;
     std::unique_ptr<RecognitionEventCodec> recognitionEventCodec_;
@@ -70,6 +75,7 @@ private:
     std::unique_ptr<ImageLoadService> imageLoadService_;
     std::unique_ptr<HistoryService> historyService_;
     std::unique_ptr<CsvDownloadService> csvDownloadService_;
+    std::unique_ptr<AccessListService> accessListService_;
     std::unique_ptr<QSettings> settings_;
     std::unique_ptr<AppController> controller_;
 };

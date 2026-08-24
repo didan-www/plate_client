@@ -108,14 +108,20 @@ add_library(
 
 add_library(
     plate_client_ui STATIC
+    ui/models/AccessListTableModel.h
+    ui/models/AccessListTableModel.cpp
     ui/models/RecognitionTableModel.h
     ui/models/RecognitionTableModel.cpp
+    ui/pages/AccessListPage.h
+    ui/pages/AccessListPage.cpp
     ui/pages/RealtimePage.h
     ui/pages/RealtimePage.cpp
     ui/pages/HistoryPage.h
     ui/pages/HistoryPage.cpp
     ui/widgets/ConnectionStatusIndicator.h
     ui/widgets/ConnectionStatusIndicator.cpp
+    ui/widgets/AccessListCreateDialog.h
+    ui/widgets/AccessListCreateDialog.cpp
     ui/widgets/NavigationSidebar.h
     ui/widgets/NavigationSidebar.cpp
     ui/windows/LoginWindow.h
@@ -194,6 +200,7 @@ target_include_directories(
 target_link_libraries(
     plate_client_ui
     PUBLIC
+        plate_client_access_list
         plate_client_history
         plate_client_mqtt
         plate_client_realtime
@@ -303,6 +310,7 @@ target_include_directories(
 target_link_libraries(
     plate_client_app
     PUBLIC
+        plate_client_access_list
         plate_client_auth
         plate_client_config
         plate_client_http

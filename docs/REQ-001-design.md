@@ -125,6 +125,10 @@ TASK-018 将上述两个模块放入独立的名单静态库，仅由 Qt Core、
 
 `RealtimePage` 只订阅 `RealtimeRecognitionStore` 和 `ImageLoadService` 的信号，不解析 MQTT、不构造 HTTP 请求，也不复制业务状态机。`RecognitionTableModel` 以实时或历史模式只读映射对应服务提供的 `items`，不维护独立业务副本；图片服务返回的 `QImage` 仅在 `RealtimePage` 所在线程再次核对当前记录后转换为 `QPixmap`。
 
+`AccessListPage` 使用单一 `AccessListService` 映射当前标签的服务端分页，不在模型或页面中本地插入、删除或复制名单记录。首次显示默认查询空关键字的白名单第一页；页面切离时取消在途分页查询，重新显示时刷新最后已提交查询。切换白名单/黑名单标签时清空未提交关键字并查询新类型第一页；搜索和重置回到第一页，刷新和翻页只使用最后已提交条件。
+
+新增对话框显示当前名单类型，只收集车牌号和可选备注；写操作活动期间禁止重复提交和第二个页面写操作。删除只针对当前选中记录，确认框同时显示名单类型和车牌号。页面仅在 Service 返回 `Applied` 或 `AlreadyAbsent` 后等待服务刷新；若删除后服务端返回的当前页为空且页码大于 1，再查询前一页。`NotApplied`、`Unknown`、`Busy` 和其他错误只显示非阻断提示并保留原表格。
+
 `LoginWindow` 固定为 `520×420` 逻辑尺寸，使用 `44px`、`#1F5F99` 的 Qt 自绘标题栏并提供拖动、最小化和关闭，不提供最大化或缩放。主体使用浅灰背景；Logo 标题组合居中，用户名和密码行按图标、左对齐标签、输入框三列对齐，登录按钮固定为 `220×48` 并靠近底部。错误提示预留稳定区域，不得引起按钮位移。
 
 登录图片统一位于 `src/ui/resources/images/login`，由 `src/ui/resources/plate_client.qrc` 以 `:/images/login/...` 路径编译进 `plate_client_ui`。UI 库显式初始化资源，应用和独立 UI 测试均不得依赖当前工作目录。
@@ -519,6 +523,8 @@ Service 对外写结果使用 `Applied`、`AlreadyAbsent`、`NotApplied` 和 `Un
 ### 15.4 生命周期和重入
 
 会话激活或失效时分别递增查询与写代次，先清除活动句柄，再取消旧查询、原写或核实请求；激活新会话时清空上次查询和分页数据。`AccessListService` 析构执行相同取消但不发 UI 结果。所有回调以 Service 作为 QObject 上下文并使用 `QPointer` 或等价防护；发射信号后必须重新检查对象和活动状态，防止同步槽删除 Service 后继续访问。TASK-018 不创建页面、窗口或 `Application` 所有权；TASK-019 再负责注入和页面生命周期。
+
+TASK-019 由 `Application` 在 `HttpClient` 和 `SessionService` 之后构造并持有 `AccessListApiClient` 与 `AccessListService`，默认窗口工厂将同一 `AccessListService` 注入 `MainWindow`/`AccessListPage`。成员声明和销毁顺序必须保证 controller/window 先销毁，然后销毁 `AccessListService`，再销毁 `AccessListApiClient`，最后才销毁共同依赖的 `HttpClient` 和 `SessionService`。页面析构只取消自己发起的名单分页查询；TASK-020 再统一完善退出和关闭时的全局异步清理。
 
 ## 16. 退出和销毁顺序
 

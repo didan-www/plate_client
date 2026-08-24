@@ -889,9 +889,11 @@ TASK-018 已验收。
 - 实现 `AccessListPage`、`AccessListTableModel` 和新增对话框。
 - 页面提供白名单/黑名单标签、搜索、重置、刷新、新增、删除和分页。
 - 表格显示序号、车牌号、备注、创建用户和创建时间。
+- 首次显示查询空关键字的白名单第一页；切离页面取消在途分页查询，重新显示时刷新最后提交条件。标签切换清空未提交关键字并从新类型第一页查询；搜索/重置回到第一页，刷新/翻页只使用最后提交条件。
 - 新增继承当前标签，提交期间防重复；成功或核实已生效后刷新当前页。
 - 删除前显示名单类型和车牌号；成功后处理空页回退。
 - 409 显示现有名单类型，404 删除视为已不存在并刷新。
+- `Application` 持有 `AccessListApiClient` 和 `AccessListService`，将同一 Service 注入默认 `MainWindow`/`AccessListPage`；销毁顺序为 controller/window、名单 Service、名单 API、共同 HTTP/会话依赖。
 
 **预计修改文件**
 
@@ -902,8 +904,15 @@ TASK-018 已验收。
 - `src/ui/widgets/AccessListCreateDialog.h`
 - `src/ui/widgets/AccessListCreateDialog.cpp`
 - `src/ui/windows/MainWindow.*`
+- `src/app/Application.h`
+- `src/app/Application.cpp`
 - `tests/ui/tst_access_list_page.cpp`
 - `tests/ui/tst_access_list_dialog.cpp`
+- `tests/ui/tst_main_window_shell.cpp`
+- `tests/app/tst_application_startup.cpp`
+- `README.md`
+- `docs/REQ-001-design.md`
+- `docs/REQ-001-tasks.md`
 - `src/CMakeLists.txt`
 - `tests/CMakeLists.txt`
 
@@ -912,6 +921,7 @@ TASK-018 已验收。
 - 覆盖标签切换、搜索触发、重置、翻页、刷新及快速操作的旧响应隔离。
 - 覆盖新增校验、重复提交保护、409、删除确认、404 和空页回退。
 - 覆盖超时核实的三种 UI 结果，不通过本地插入/删除伪造成功。
+- 验证 `Application` 持有并注入同一名单 Service，且 MainWindow/页面、Service、API 和共同依赖按规定顺序安全销毁。
 
 **验收标准**
 

@@ -1,8 +1,10 @@
 #include "app/Application.h"
 
 #include "app/AppController.h"
+#include "infrastructure/http/AccessListApiClient.h"
 #include "infrastructure/mqtt/MqttRecognitionSubscriber.h"
 #include "services/ImageLoadService.h"
+#include "services/AccessListService.h"
 #include "services/HistoryService.h"
 #include "services/RealtimeRecognitionStore.h"
 #include "services/CsvDownloadService.h"
@@ -11,6 +13,7 @@
 #include "ui/widgets/ConnectionStatusIndicator.h"
 #include "ui/widgets/NavigationSidebar.h"
 #include "ui/pages/RealtimePage.h"
+#include "ui/pages/AccessListPage.h"
 #include "ui/pages/HistoryPage.h"
 #include "ui/windows/LoginWindow.h"
 #include "ui/windows/MainWindow.h"
@@ -229,11 +232,14 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     QVERIFY(window);
     QVERIFY(window->realtimePage());
     QVERIFY(window->historyPage());
+    QVERIFY(window->accessListPage());
     QCOMPARE(window->realtimePage()->store(), runtime->realtimeStore());
     QCOMPARE(window->realtimePage()->imageLoadService(), runtime->imageLoadService());
     QCOMPARE(window->historyPage()->historyService(), runtime->historyService());
     QCOMPARE(window->historyPage()->csvDownloadService(),
              runtime->csvDownloadService());
+    QCOMPARE(window->accessListPage()->service(), runtime->accessListService());
+    QVERIFY(runtime->accessListApiClient());
     QCOMPARE(server.requests().at(1).target,
              QByteArrayLiteral("/api/v1/clients/heartbeat"));
     QTRY_COMPARE(window->sidebar()->httpStatusIndicator()->statusText(),
@@ -295,6 +301,8 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
     QPointer<ImageLoadService> guardedImages(runtime->imageLoadService());
     QPointer<HistoryService> guardedHistory(runtime->historyService());
     QPointer<CsvDownloadService> guardedCsv(runtime->csvDownloadService());
+    QPointer<AccessListService> guardedAccessLists(runtime->accessListService());
+    QPointer<AccessListApiClient> guardedAccessListApi(runtime->accessListApiClient());
     connect(window, &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("window")); });
     connect(runtime->imageLoadService(), &QObject::destroyed, this,
@@ -303,16 +311,24 @@ void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow(
             [&destructionOrder] { destructionOrder.append(QStringLiteral("history")); });
     connect(runtime->csvDownloadService(), &QObject::destroyed, this,
             [&destructionOrder] { destructionOrder.append(QStringLiteral("csv")); });
+    connect(runtime->accessListService(), &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("access-service")); });
+    connect(runtime->accessListApiClient(), &QObject::destroyed, this,
+            [&destructionOrder] { destructionOrder.append(QStringLiteral("access-api")); });
     runtime.reset();
     QVERIFY(guardedWindow.isNull());
     QVERIFY(guardedImages.isNull());
     QVERIFY(guardedHistory.isNull());
     QVERIFY(guardedCsv.isNull());
+    QVERIFY(guardedAccessLists.isNull());
+    QVERIFY(guardedAccessListApi.isNull());
     QCOMPARE(destructionOrder,
              QStringList({QStringLiteral("window"),
+                          QStringLiteral("access-service"),
                           QStringLiteral("csv"),
                           QStringLiteral("history"),
-                          QStringLiteral("images")}));
+                          QStringLiteral("images"),
+                          QStringLiteral("access-api")}));
 }
 
 QTEST_MAIN(ApplicationStartupTest)

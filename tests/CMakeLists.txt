@@ -187,6 +187,18 @@ add_executable(
 )
 
 add_executable(
+    tst_access_list_dialog
+    ui/tst_access_list_dialog.cpp
+)
+
+add_executable(
+    tst_access_list_page
+    ui/tst_access_list_page.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
     plate_client_main_window_preview EXCLUDE_FROM_ALL
     ui/main_window_preview.cpp
 )
@@ -236,6 +248,8 @@ plate_client_apply_project_options(tst_recognition_table_model)
 plate_client_apply_project_options(tst_realtime_page)
 plate_client_apply_project_options(tst_history_page)
 plate_client_apply_project_options(tst_history_export)
+plate_client_apply_project_options(tst_access_list_dialog)
+plate_client_apply_project_options(tst_access_list_page)
 plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
@@ -511,6 +525,23 @@ target_link_libraries(
 )
 
 target_link_libraries(
+    tst_access_list_dialog
+    PRIVATE
+        plate_client_ui
+        Qt6::Test
+)
+
+target_include_directories(tst_access_list_page PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_access_list_page
+    PRIVATE
+        plate_client_ui
+        Qt6::Network
+        Qt6::Test
+)
+
+target_link_libraries(
     plate_client_main_window_preview
     PRIVATE
         plate_client_ui
@@ -579,6 +610,11 @@ add_test(NAME unit.history_page.dpi100 COMMAND tst_history_page)
 add_test(NAME unit.history_page.dpi150 COMMAND tst_history_page)
 add_test(NAME unit.history_page.dpi200 COMMAND tst_history_page)
 add_test(NAME unit.history_export COMMAND tst_history_export)
+add_test(NAME unit.access_list_dialog COMMAND tst_access_list_dialog)
+add_test(NAME unit.access_list_page COMMAND tst_access_list_page)
+add_test(NAME unit.access_list_page.dpi100 COMMAND tst_access_list_page)
+add_test(NAME unit.access_list_page.dpi150 COMMAND tst_access_list_page)
+add_test(NAME unit.access_list_page.dpi200 COMMAND tst_access_list_page)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
@@ -626,6 +662,11 @@ set_tests_properties(
     unit.history_page.dpi150
     unit.history_page.dpi200
     unit.history_export
+    unit.access_list_dialog
+    unit.access_list_page
+    unit.access_list_page.dpi100
+    unit.access_list_page.dpi150
+    unit.access_list_page.dpi200
     unit.app_controller_login
     unit.application_startup
     app.startup
@@ -638,6 +679,7 @@ set_tests_properties(
     unit.main_window_shell.dpi100
     unit.realtime_page.dpi100
     unit.history_page.dpi100
+    unit.access_list_page.dpi100
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1"
 )
 
@@ -646,6 +688,7 @@ set_tests_properties(
     unit.main_window_shell.dpi150
     unit.realtime_page.dpi150
     unit.history_page.dpi150
+    unit.access_list_page.dpi150
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=1.5"
 )
 
@@ -654,5 +697,6 @@ set_tests_properties(
     unit.main_window_shell.dpi200
     unit.realtime_page.dpi200
     unit.history_page.dpi200
+    unit.access_list_page.dpi200
     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=2"
 )
