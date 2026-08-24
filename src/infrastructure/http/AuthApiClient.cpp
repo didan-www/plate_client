@@ -265,7 +265,7 @@ LoginRequestHandle *AuthApiClient::login(const QString &username, const QString 
     return handle;
 }
 
-LogoutRequestHandle *AuthApiClient::logout(const QString &accessToken,
+LogoutRequestHandle *AuthApiClient::logout(QString accessToken,
                                            quint64 sessionGeneration)
 {
     auto *handle = new LogoutRequestHandle(this);
@@ -288,7 +288,7 @@ LogoutRequestHandle *AuthApiClient::logout(const QString &accessToken,
                         HttpResponseMode::JsonMemory,
                         context,
                         {},
-                        accessToken);
+                        std::move(accessToken));
     HttpRequestHandle *transport = httpClient_->send(std::move(request));
     handle->transportHandle_ = transport;
     connect(transport, &HttpRequestHandle::succeeded, handle,

@@ -39,6 +39,7 @@ private slots:
     void permanentErrors();
     void rejectsPlainMqttUnlessExplicitlyAllowed();
     void invalidationCancelsReconnectAndClearsCredentials();
+    void stopReconnectDefersDisconnectAndFullStopIsIdempotent();
     void newSessionResetsPermanentError();
     void staleGenerationCallbacksAreIgnored();
     void forwardsOnlyCurrentSubscribedTopic();
@@ -246,6 +247,37 @@ void MqttSubscriberTest::invalidationCancelsReconnectAndClearsCredentials()
     QVERIFY(client.lastConfiguration.password.isEmpty());
     QTest::qWait(40);
     QCOMPARE(client.connectCount, connects);
+}
+
+void MqttSubscriberTest::stopReconnectDefersDisconnectAndFullStopIsIdempotent()
+{
+    SessionService sessions;
+    MockMqttClient client;
+    MqttRecognitionSubscriber subscriber(QStringLiteral("client-id"), false,
+                                         &sessions, &client, 20ms);
+    QVERIFY(sessions.establishSession(session()));
+    const quint64 generation = sessions.currentGeneration();
+    client.reportConnected(generation);
+    client.reportSubscriptionSucceeded(generation);
+    QCOMPARE(subscriber.state(), MqttConnectivityState::Connected);
+    const int disconnects = client.disconnectCount;
+
+    subscriber.stopReconnect();
+    QVERIFY(!subscriber.isRunning());
+    QCOMPARE(client.disconnectCount, disconnects);
+    QCOMPARE(subscriber.state(), MqttConnectivityState::Connected);
+    client.reportDisconnected(generation);
+    QTest::qWait(30);
+    QCOMPARE(client.connectCount, 1);
+
+    subscriber.disconnectAndClear();
+    QCOMPARE(client.disconnectCount, disconnects + 1);
+    QCOMPARE(subscriber.state(), MqttConnectivityState::Disconnected);
+    QCOMPARE(subscriber.sessionGeneration(), quint64(0));
+    subscriber.stop();
+    QCOMPARE(client.disconnectCount, disconnects + 1);
+    QCOMPARE(subscriber.state(), MqttConnectivityState::Disconnected);
+    sessions.clear();
 }
 
 void MqttSubscriberTest::newSessionResetsPermanentError()

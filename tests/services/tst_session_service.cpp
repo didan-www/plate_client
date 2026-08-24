@@ -59,6 +59,7 @@ private slots:
     void rejectsExpiredOrPreassignedSession();
     void expiresAndInvalidatesOnce();
     void unauthorizedInvalidatesOnlyCurrentSessionOnce();
+    void twoPhaseTerminationInvalidatesGenerationBeforeFinalBroadcast();
     void bestEffortLogoutClearsImmediately();
 };
 
@@ -173,6 +174,38 @@ void SessionServiceTest::unauthorizedInvalidatesOnlyCurrentSessionOnce()
     QCOMPARE(invalidated.count(), 1);
     service.handleUnauthorized(second);
     QCOMPARE(invalidated.count(), 2);
+}
+
+void SessionServiceTest::twoPhaseTerminationInvalidatesGenerationBeforeFinalBroadcast()
+{
+    const QDateTime now = QDateTime::currentDateTime();
+    SessionService service([now] { return now; });
+    QSignalSpy invalidated(&service, &SessionService::sessionInvalidated);
+    QVERIFY(service.establishSession(makeSession(now.addSecs(60))));
+    const quint64 activeGeneration = service.currentGeneration();
+
+    auto termination = service.beginTermination(SessionInvalidationReason::LoggedOut);
+    QVERIFY(termination.has_value());
+    QCOMPARE(termination->generation(), activeGeneration);
+    QVERIFY(service.currentGeneration() > activeGeneration);
+    QVERIFY(!service.hasActiveSession());
+    QVERIFY(!service.summary().has_value());
+    QVERIFY(!service.isCurrent(RequestContext(activeGeneration, 1,
+                                               QStringLiteral("history.query"))));
+    QVERIFY(!service.beginTermination(SessionInvalidationReason::Unauthorized).has_value());
+    QCOMPARE(invalidated.count(), 0);
+    QCOMPARE(termination->takeAccessToken(), QStringLiteral("access-secret"));
+    QVERIFY(termination->takeAccessToken().isEmpty());
+
+    service.completeTermination(activeGeneration + 1);
+    QCOMPARE(invalidated.count(), 0);
+    service.completeTermination(activeGeneration);
+    QCOMPARE(invalidated.count(), 1);
+    QCOMPARE(qvariant_cast<SessionInvalidationReason>(invalidated.first().first()),
+             SessionInvalidationReason::LoggedOut);
+    service.completeTermination(activeGeneration);
+    QCOMPARE(invalidated.count(), 1);
+    QVERIFY(service.isCurrent(RequestContext(0, 1, QStringLiteral("auth.login"))));
 }
 
 void SessionServiceTest::bestEffortLogoutClearsImmediately()

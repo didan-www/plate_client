@@ -218,6 +218,20 @@ add_executable(
     support/MockMqttClient.h
 )
 
+add_executable(
+    tst_logout_lifecycle
+    app/tst_logout_lifecycle.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
+add_executable(
+    tst_async_destruction
+    app/tst_async_destruction.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+)
+
 plate_client_apply_project_options(tst_smoke)
 plate_client_apply_project_options(tst_bootstrap_config)
 plate_client_apply_project_options(tst_technical_logger)
@@ -253,6 +267,8 @@ plate_client_apply_project_options(tst_access_list_page)
 plate_client_apply_project_options(plate_client_main_window_preview)
 plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
+plate_client_apply_project_options(tst_logout_lifecycle)
+plate_client_apply_project_options(tst_async_destruction)
 
 target_link_libraries(
     tst_smoke
@@ -568,6 +584,26 @@ target_link_libraries(
 
 target_include_directories(tst_application_startup PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+target_include_directories(tst_logout_lifecycle PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_logout_lifecycle
+    PRIVATE
+        plate_client_app
+        Qt6::Network
+        Qt6::Test
+)
+
+target_include_directories(tst_async_destruction PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(
+    tst_async_destruction
+    PRIVATE
+        plate_client_app
+        Qt6::Network
+        Qt6::Test
+)
+
 add_test(NAME unit.smoke COMMAND tst_smoke)
 add_test(NAME unit.bootstrap_config COMMAND tst_bootstrap_config)
 add_test(NAME unit.technical_logger COMMAND tst_technical_logger)
@@ -617,6 +653,8 @@ add_test(NAME unit.access_list_page.dpi150 COMMAND tst_access_list_page)
 add_test(NAME unit.access_list_page.dpi200 COMMAND tst_access_list_page)
 add_test(NAME unit.app_controller_login COMMAND tst_app_controller_login)
 add_test(NAME unit.application_startup COMMAND tst_application_startup)
+add_test(NAME unit.logout_lifecycle COMMAND tst_logout_lifecycle)
+add_test(NAME unit.async_destruction COMMAND tst_async_destruction)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
 
 set_tests_properties(
@@ -669,6 +707,8 @@ set_tests_properties(
     unit.access_list_page.dpi200
     unit.app_controller_login
     unit.application_startup
+    unit.logout_lifecycle
+    unit.async_destruction
     app.startup
     PROPERTIES
         TIMEOUT 10

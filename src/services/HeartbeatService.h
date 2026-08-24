@@ -33,6 +33,7 @@ public:
     [[nodiscard]] bool isRunning() const noexcept;
     [[nodiscard]] bool requestInFlight() const noexcept;
 
+    void stopScheduling();
     void stop();
 
 signals:

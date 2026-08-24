@@ -74,8 +74,8 @@ public:
                   QObject *parent = nullptr);
 
     [[nodiscard]] LoginRequestHandle *login(const QString &username, const QString &password);
-    [[nodiscard]] LogoutRequestHandle *logout(const QString &accessToken,
-                                              quint64 sessionGeneration);
+    [[nodiscard]] LogoutRequestHandle *logout(QString accessToken,
+                                               quint64 sessionGeneration);
 
 private:
     [[nodiscard]] QUrl endpoint(const QString &path) const;

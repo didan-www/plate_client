@@ -528,17 +528,27 @@ TASK-019 由 `Application` 在 `HttpClient` 和 `SessionService` 之后构造并
 
 ## 16. 退出和销毁顺序
 
-退出登录或关闭窗口时按以下顺序执行：
+`SessionService` 内部使用 `Inactive`、`Active`、`LoggingOut` 三态，并以开始终止和完成终止两个阶段实现会话失效。开始终止只允许从 `Active` 进入 `LoggingOut`：停止令牌到期定时器，将当前 Token 和失效前代次移入不可复制、只允许移动的 termination context，随后立即递增会话代次，使所有旧 `RequestContext` 在任何取消回调发生前失效。完成终止才销毁剩余 `SessionContext`、清空 MQTT 凭据并进入 `Inactive`。`LoggingOut` 期间的重复终止请求必须返回未开始，不得再次递增代次、发送注销或执行清理。
 
-1. 将会话状态切换为 LoggingOut 并递增会话代次。
-2. 停止心跳、令牌到期和 MQTT 重连定时器。
-3. 取消所有 QNetworkReply、CSV 文件写入和图片重试定时器。
-4. 使用当前令牌构造并发送尽力注销请求；请求不允许更新业务 UI，也不得阻止本地退出。
-5. 断开 MQTT 并清除订阅。
-6. 清空实时记录、页面模型、当前图片、访问令牌和 MQTT 凭据。
-7. 销毁主窗口并显示登录页，或结束进程；关闭应用时不等待注销响应。
+`AppController` 是退出编排的唯一入口。用户点击退出、`MainWindow` 关闭、令牌到期和当前会话业务 HTTP 401 都进入同一幂等流程；前两种触发分别预置 `ReturnToLogin` 和 `QuitApplication`，后两种触发使用 `ReturnToLogin`。该分流只决定最后一步显示干净登录页还是结束进程，不改变前六步清理。不得为窗口关闭扩展公共会话失效原因，也不得修改 HTTP、MQTT 或 DTO 契约。
 
-尽力注销在第 4 步将 Token 移交给只移动的 `HttpRequest` 后立即执行后续本地清理；注销超时、网络失败或错误响应均不得恢复会话。
+统一终止流程严格按以下顺序执行：
+
+1. 调用 `SessionService` 开始终止，进入 `LoggingOut`，安全移交 termination context，并先递增会话代次。
+2. 调用 `HeartbeatService::stopScheduling()` 只停止心跳定时器、禁止发起新心跳但不取消已有心跳请求，同时停止 MQTT 重连定时器；令牌到期定时器已由开始终止同步停止。此时只预停调度，不提前取消 reply 或断开 MQTT。
+3. 停止图片重试并取消 CSV 原子写入，再由 `HttpClient::cancelAll()` 取消并使所有旧活动 `QNetworkReply` 完成；取消回调只能观察到已失效代次。
+4. 在 `cancelAll()` 返回后，使用 termination context 中的 Token 和旧代次新建并发送尽力注销请求。该请求因此不属于第 3 步的旧请求集合，不得连接业务 UI 回调，也不得阻止本地退出。
+5. 断开 MQTT，清除订阅、事件主题和 MQTT 客户端凭据；预停使断开过程不能再次安排重连。
+6. 调用 `SessionService` 完成终止，清空实时记录、历史和名单模型、当前图片、访问令牌及 MQTT 凭据，并发出最终 `sessionInvalidated` 广播。既有 Heartbeat、MQTT、RealtimeStore、ReconnectReconciler、Image、History、CSV 和 AccessList 清理槽继续复用；所有重复停止或取消必须幂等。
+7. 销毁主窗口；`ReturnToLogin` 重建并显示不含旧错误、密码或业务状态的登录页，`QuitApplication` 立即结束事件循环。两种分支均不等待注销响应。
+
+termination context 在第 4 步将 Token 继续移动给只移动的 `HttpRequest`，自身不得保留可再次使用的 Token 副本。尽力注销的成功、超时、网络失败、取消或错误响应只负责释放请求资源，不得更新登录页或任何业务 UI，也不得恢复会话。新登录可在旧注销尚未返回时开始，旧注销响应仍按失效代次静默处理。
+
+`HttpClient` 跟踪活动请求句柄，完成或销毁时自动移除；`cancelAll()` 对快照执行幂等取消，且不得取消调用返回后才创建的注销请求。`MqttRecognitionSubscriber` 将“停止重连定时器”和“最终断开并清除订阅/凭据”拆成两个可重复调用的阶段，现有完整 `stop()` 行为保持兼容。
+
+`HeartbeatService::stopScheduling()` 只停止心跳定时器、将服务置为不再调度新请求，不取消 `activeRequest`；现有 `stop()` 固定为先调用 `stopScheduling()`，再取消并清除 `activeRequest`。第 3 步由 `HttpClient::cancelAll()` 统一取消该心跳请求，最终 `sessionInvalidated` 广播再次调用完整 `stop()` 幂等收尾。
+
+`MainWindow::closeEvent` 首次收到关闭事件时必须忽略默认关闭并发出一次 `closeRequested`，由 `AppController` 完成同步本地清理后销毁窗口并退出，避免 `quitOnLastWindowClosed` 抢在清理之前结束事件循环。侧栏 `logoutRequested` 只选择 `ReturnToLogin`，不得直接关闭窗口。
 
 所有回调使用 QObject 上下文连接或 QPointer 防护，不捕获无生命周期保证的 QWidget 裸指针。
 

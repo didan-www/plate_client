@@ -13,6 +13,26 @@ class AuthApiClient;
 class LogoutRequestHandle;
 class RequestContext;
 
+class SessionTerminationContext final
+{
+public:
+    SessionTerminationContext(QString accessToken, quint64 generation);
+    SessionTerminationContext(const SessionTerminationContext &) = delete;
+    SessionTerminationContext &operator=(const SessionTerminationContext &) = delete;
+    SessionTerminationContext(SessionTerminationContext &&other) noexcept;
+    SessionTerminationContext &operator=(SessionTerminationContext &&other) noexcept;
+    ~SessionTerminationContext();
+
+    [[nodiscard]] quint64 generation() const noexcept;
+    [[nodiscard]] QString takeAccessToken() noexcept;
+
+private:
+    void clearSensitiveData() noexcept;
+
+    QString accessToken_;
+    quint64 generation_ = 0;
+};
+
 class SessionSummary final
 {
 public:
@@ -66,21 +86,37 @@ public:
                                            const MqttCredentialsConsumer &consumer) const;
 
     void handleUnauthorized(quint64 sessionGeneration);
+    [[nodiscard]] std::optional<SessionTerminationContext>
+    beginTermination(SessionInvalidationReason reason);
+    void completeTermination(quint64 generation);
     [[nodiscard]] LogoutRequestHandle *logout(AuthApiClient *authApiClient);
     void clear(SessionInvalidationReason reason = SessionInvalidationReason::LoggedOut);
 
 signals:
     void sessionActivated(const SessionSummary &summary);
+    void terminationRequested(SessionInvalidationReason reason, quint64 generation);
     void sessionInvalidated(SessionInvalidationReason reason, quint64 generation);
 
 private:
+    enum class State
+    {
+        Inactive,
+        Active,
+        LoggingOut,
+    };
+
     void scheduleExpiry();
     void expireIfCurrent(quint64 generation);
-    void invalidate(SessionInvalidationReason reason);
+    void requestTermination(SessionInvalidationReason reason);
+    void advanceGeneration();
 
     Clock clock_;
     QTimer expiryTimer_;
     std::optional<SessionContext> session_;
+    State state_ = State::Inactive;
+    std::optional<SessionInvalidationReason> terminationReason_;
+    quint64 terminatingGeneration_ = 0;
+    bool terminationRequestPending_ = false;
     quint64 generationCounter_ = 0;
 };
 

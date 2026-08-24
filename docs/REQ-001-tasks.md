@@ -941,36 +941,58 @@ TASK-019 已验收。
 
 **实现内容**
 
-- 按设计顺序实现 `LoggingOut`：递增会话代次、停止定时器、取消 reply 和图片重试、尽力注销、断开 MQTT、清理数据、销毁窗口。
-- 点击退出返回登录页；关闭主窗口执行同等清理后结束进程，不进入托盘。
-- 清空实时列表、历史/名单模型、当前图片、Token 和 MQTT 凭据。
+- 为 `SessionService` 实现 `Inactive/Active/LoggingOut` 内部状态和开始/完成两阶段终止；开始阶段将 Token 与旧代次移入只移动 termination context，先使旧代次失效，完成阶段再清空剩余凭据并发最终 `sessionInvalidated`。
+- 由 `AppController` 幂等统一处理退出登录、`MainWindow` 关闭、令牌到期和当前会话业务 HTTP 401；显式区分 `ReturnToLogin` 与 `QuitApplication`，重复触发只执行一次完整流程。
+- 严格按设计第 16 章执行：代次先失效，停止心跳/到期/MQTT 重连，取消图片重试、CSV 写入和全部旧 reply，再新发不阻塞的尽力注销，随后断开 MQTT、清理数据并销毁窗口。
+- `HttpClient::cancelAll()` 只取消调用时已有的活动请求，不得取消其后新发的注销请求；注销不连接业务 UI，任何结果都不恢复会话且本地退出不等待响应。
+- MQTT 先只停止重连，发送注销后再断开连接并清除订阅、主题和客户端凭据；最终 `sessionInvalidated` 广播复用既有服务的模型、图片和请求清理槽。
+- `MainWindow::closeEvent` 首次关闭时忽略默认事件并只发一次 `closeRequested`，由控制器清理后退出；点击退出重建干净登录页，关闭窗口执行同等清理后结束进程，不进入托盘。
+- 清空实时列表、历史/名单模型、当前图片、Token 和 MQTT 凭据。`ImageLoadService::cancel()` 和 `CsvDownloadService::cancelActive()` 复用既有实现，除非测试证明存在 TASK-020 范围内的幂等或销毁缺陷，否则不修改其源码。
 - 所有连接使用 QObject 上下文或 `QPointer`，跨线程结果使用 queued connection。
 - 已取消或无法取消的旧回调不得访问已销毁 QWidget。
 
 **预计修改文件**
 
-- `src/app/AppController.*`
-- `src/services/SessionService.*`
-- `src/ui/windows/MainWindow.*`
-- `src/infrastructure/http/HttpClient.*`
-- `src/infrastructure/mqtt/MqttRecognitionSubscriber.*`
-- `src/services/ImageLoadService.*`
+- `src/app/AppController.h`
+- `src/app/AppController.cpp`
+- `src/app/Application.cpp`
+- `src/services/SessionService.h`
+- `src/services/SessionService.cpp`
+- `src/services/HeartbeatService.h`
+- `src/services/HeartbeatService.cpp`
+- `src/infrastructure/http/HttpClient.h`
+- `src/infrastructure/http/HttpClient.cpp`
+- `src/infrastructure/http/AuthApiClient.h`
+- `src/infrastructure/http/AuthApiClient.cpp`
+- `src/infrastructure/mqtt/MqttRecognitionSubscriber.h`
+- `src/infrastructure/mqtt/MqttRecognitionSubscriber.cpp`
+- `src/ui/windows/MainWindow.h`
+- `src/ui/windows/MainWindow.cpp`
 - `tests/app/tst_logout_lifecycle.cpp`
 - `tests/app/tst_async_destruction.cpp`
-- `src/CMakeLists.txt`
+- `tests/app/tst_app_controller_login.cpp`
+- `tests/app/tst_application_startup.cpp`
+- `tests/services/tst_session_service.cpp`
+- `tests/services/tst_heartbeat_service.cpp`
+- `tests/http/tst_http_client.cpp`
+- `tests/mqtt/tst_mqtt_subscriber.cpp`
 - `tests/CMakeLists.txt`
 
 **独立测试**
 
-- 在登录、心跳、查询、CSV、图片解码、MQTT 重连和名单写入各阶段触发退出。
-- 人为延迟所有回调到窗口销毁后，验证无崩溃、无 UI 更新和无凭据残留。
-- 验证注销超时不延迟本地退出，重复退出事件只执行一次清理。
+- 分别用退出按钮、主窗口关闭、令牌到期和当前会话业务 HTTP 401 触发同一流程，验证 `ReturnToLogin/QuitApplication` 分流及每一步严格顺序。
+- 在登录后心跳、历史查询、CSV、图片请求与后台解码、MQTT 重连、重连校准和名单写入各阶段触发终止，验证全部旧 reply、重试和文件写入被取消。
+- 人为延迟 HTTP、MQTT 和图片跨线程回调到窗口销毁后，验证无崩溃、无 UI 更新、无 CSV 临时残留和无凭据残留。
+- 验证 `cancelAll()` 后新发注销未被误取消；注销成功、超时、网络失败和错误响应均不延迟本地退出，也不更新业务 UI。
+- 连续触发及交错触发退出、关闭、到期和 401，验证只递增一次终止代次、只发送一次注销、只执行一次窗口结局。
+- 单独运行新增生命周期与异步销毁测试、所有受影响单元测试、完整 Debug 构建和全部 CTest 回归。
 
 **验收标准**
 
 - FR-093 至 FR-095 和设计第 16 章的清理顺序全部满足。
 - 退出后显示干净登录页，关闭后无活动重连或心跳定时器。
-- 内存模型和图片均被清空，不生成本地业务文件。
+- 内存模型和图片均被清空，不生成本地业务文件；取消或失败的 CSV 不留下临时文件。
+- 注销请求不阻塞本地退出、不访问业务 UI，晚到回调不能更新登录页或已销毁主窗口。
 
 ### TASK-021 完成通信与业务端到端集成测试
 

@@ -9,6 +9,7 @@
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QPair>
+#include <QSet>
 #include <QUrl>
 
 #include <chrono>
@@ -136,6 +137,7 @@ public:
                QObject *parent = nullptr);
 
     [[nodiscard]] HttpRequestHandle *send(HttpRequest &&request);
+    void cancelAll();
 
 signals:
     void responseReceived(int statusCode, quint64 sessionGeneration);
@@ -144,6 +146,7 @@ private:
     QNetworkAccessManager *networkManager_;
     ContextValidator contextValidator_;
     TimeoutResolver timeoutResolver_;
+    QSet<HttpRequestHandle *> activeHandles_;
 };
 
 Q_DECLARE_METATYPE(HttpError)

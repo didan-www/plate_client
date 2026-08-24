@@ -291,16 +291,29 @@ bool MqttRecognitionSubscriber::isRunning() const noexcept
 
 void MqttRecognitionSubscriber::stop()
 {
-    const bool changed = running_ || state_ != MqttConnectivityState::Disconnected;
+    disconnectAndClear();
+}
+
+void MqttRecognitionSubscriber::stopReconnect()
+{
     running_ = false;
     reconnectTimer_.stop();
     subscriptionPending_ = false;
+    scheduledReconnectSeconds_ = 0;
+}
+
+void MqttRecognitionSubscriber::disconnectAndClear()
+{
+    const bool changed = running_ || sessionGeneration_ != 0 || !eventTopic_.isEmpty()
+                         || state_ != MqttConnectivityState::Disconnected;
+    stopReconnect();
     sessionGeneration_ = 0;
     reconnectAttempt_ = 0;
-    scheduledReconnectSeconds_ = 0;
     eventTopic_.clear();
-    mqttClient_->disconnectFromHost();
-    mqttClient_->clearCredentials();
+    if (changed) {
+        mqttClient_->disconnectFromHost();
+        mqttClient_->clearCredentials();
+    }
     setState(MqttConnectivityState::Disconnected, {}, changed);
 }
 

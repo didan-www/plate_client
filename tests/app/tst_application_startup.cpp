@@ -141,6 +141,7 @@ class ApplicationStartupTest final : public QObject
 private slots:
     void invalidConfigBlocksBeforeRuntimeInitialization();
     void validConfigCreatesLoginFlow();
+    void logoutUsesApplicationLifecycleServices();
     void successfulLoginStartsHeartbeatAndUpdatesMainWindow();
 };
 
@@ -186,6 +187,68 @@ void ApplicationStartupTest::validConfigCreatesLoginFlow()
     QVERIFY(runtime.controller()->loginWindow() != nullptr);
     QVERIFY(runtime.controller()->loginWindow()->isVisible());
     QVERIFY(presentedError.isEmpty());
+}
+
+void ApplicationStartupTest::logoutUsesApplicationLifecycleServices()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    server.enqueueResponse(jsonResponse(envelope(sessionData())));
+    server.enqueueResponse(jsonResponse(envelope(QJsonValue::Null)));
+    MockHttpResponse logoutResponse = jsonResponse(envelope(QJsonValue::Null));
+    logoutResponse.initialDelayMs = 200;
+    server.enqueueResponse(std::move(logoutResponse));
+    const QByteArray bytes = QJsonDocument(QJsonObject {
+                                               {QStringLiteral("clientId"),
+                                                QStringLiteral("12345678-1234-4abc-8def-1234567890ab")},
+                                               {QStringLiteral("loginBaseUrl"),
+                                                server.url().toString()},
+                                               {QStringLiteral("allowInsecureTransport"), true},
+                                           })
+                                  .toJson(QJsonDocument::Compact);
+    MockMqttClient mqttClient;
+    Application runtime(
+        [](const QString &) { qFatal("Unexpected startup error."); },
+        AppController::WindowFactory {},
+        [&mqttClient](const QString &clientId,
+                      bool allowInsecureTransport,
+                      SessionService *sessions) {
+            return std::make_unique<MqttRecognitionSubscriber>(
+                clientId,
+                allowInsecureTransport,
+                sessions,
+                &mqttClient,
+                std::chrono::milliseconds(20));
+        });
+    QVERIFY(runtime.startFromConfigFile(writeConfig(directory.path(), bytes)));
+    LoginWindow *login = runtime.controller()->loginWindow();
+    login->findChild<QLineEdit *>(QStringLiteral("usernameEdit"))->setText(
+        QStringLiteral("operator"));
+    login->findChild<QLineEdit *>(QStringLiteral("passwordEdit"))->setText(
+        QStringLiteral("secret"));
+    login->findChild<QPushButton *>(QStringLiteral("loginButton"))->click();
+    QTRY_COMPARE(server.requests().size(), 2);
+    auto *window = qobject_cast<MainWindow *>(runtime.controller()->authenticatedWindow());
+    QVERIFY(window);
+    QPointer<MainWindow> guardedWindow(window);
+    const int disconnectsBeforeLogout = mqttClient.disconnectCount;
+
+    window->logoutRequested();
+
+    QVERIFY(runtime.controller()->authenticatedWindow() == nullptr);
+    QVERIFY(runtime.controller()->loginWindow());
+    QVERIFY(runtime.controller()->loginWindow()->isVisible());
+    QVERIFY(runtime.realtimeStore()->items().isEmpty());
+    QVERIFY(!runtime.imageLoadService()->requestInFlight());
+    QVERIFY(!runtime.csvDownloadService()->isDownloading());
+    QCOMPARE(mqttClient.disconnectCount, disconnectsBeforeLogout + 1);
+    QVERIFY(mqttClient.lastConfiguration.username.isEmpty());
+    QVERIFY(mqttClient.lastConfiguration.password.isEmpty());
+    QTRY_VERIFY(guardedWindow.isNull());
+    QTRY_COMPARE(server.requests().size(), 3);
+    QCOMPARE(server.requests().at(2).target, QByteArrayLiteral("/api/v1/auth/logout"));
 }
 
 void ApplicationStartupTest::successfulLoginStartsHeartbeatAndUpdatesMainWindow()

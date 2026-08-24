@@ -1,8 +1,11 @@
 #include "app/AppController.h"
 
 #include "infrastructure/http/AuthApiClient.h"
+#include "services/SessionService.h"
 #include "ui/windows/LoginWindow.h"
+#include "ui/windows/MainWindow.h"
 
+#include <QCoreApplication>
 #include <QSettings>
 #include <QWidget>
 
@@ -13,17 +16,26 @@ constexpr auto lastUsernameKey = "login/lastUsername";
 }
 
 AppController::AppController(AuthApiClient *authApiClient,
+                             SessionService *sessionService,
                              QSettings *settings,
                              WindowFactory windowFactory,
+                             TerminationActions terminationActions,
                              QObject *parent)
     : QObject(parent)
     , authApiClient_(authApiClient)
+    , sessionService_(sessionService)
     , settings_(settings)
     , windowFactory_(std::move(windowFactory))
+    , terminationActions_(std::move(terminationActions))
 {
     Q_ASSERT(authApiClient_);
+    Q_ASSERT(sessionService_);
     Q_ASSERT(settings_);
     Q_ASSERT(windowFactory_);
+    connect(sessionService_, &SessionService::terminationRequested, this,
+            [this](SessionInvalidationReason reason, quint64) {
+                terminate(reason, TerminationDisposition::ReturnToLogin);
+            });
 }
 
 AppController::~AppController()
@@ -91,6 +103,18 @@ void AppController::completeLoginSuccess(LoginRequestHandle *handle, const QStri
     authenticatedWindow_ = windowFactory_(displayName);
     if (authenticatedWindow_) {
         authenticatedWindow_->setAttribute(Qt::WA_DeleteOnClose);
+        if (auto *mainWindow = qobject_cast<MainWindow *>(authenticatedWindow_.data())) {
+            connect(mainWindow, &MainWindow::logoutRequested, this,
+                    [this] {
+                        terminate(SessionInvalidationReason::LoggedOut,
+                                  TerminationDisposition::ReturnToLogin);
+                    });
+            connect(mainWindow, &MainWindow::closeRequested, this,
+                    [this] {
+                        terminate(SessionInvalidationReason::LoggedOut,
+                                  TerminationDisposition::QuitApplication);
+                    });
+        }
         authenticatedWindow_->show();
     }
     emit loginSucceeded();
@@ -105,6 +129,60 @@ void AppController::completeLoginFailure(const AuthError &error)
     loginWindow_->clearPassword();
     loginWindow_->setSubmitting(false);
     loginWindow_->showError(displayMessage(error));
+}
+
+void AppController::terminate(SessionInvalidationReason reason,
+                              TerminationDisposition disposition)
+{
+    if (terminationInProgress_) {
+        return;
+    }
+    auto termination = sessionService_->beginTermination(reason);
+    if (!termination) {
+        return;
+    }
+    terminationInProgress_ = true;
+
+    if (terminationActions_.stopScheduling) {
+        terminationActions_.stopScheduling();
+    }
+    if (terminationActions_.cancelAsync) {
+        terminationActions_.cancelAsync();
+    }
+
+    const quint64 generation = termination->generation();
+    (void)authApiClient_->logout(termination->takeAccessToken(), generation);
+
+    if (terminationActions_.disconnectMqtt) {
+        terminationActions_.disconnectMqtt();
+    }
+    sessionService_->completeTermination(generation);
+
+    QWidget *window = authenticatedWindow_.data();
+    authenticatedWindow_.clear();
+    if (window) {
+        window->hide();
+        window->deleteLater();
+    }
+
+    LoginWindow *login = loginWindow_.data();
+    loginWindow_.clear();
+    if (login) {
+        login->hide();
+        login->deleteLater();
+    }
+
+    if (disposition == TerminationDisposition::QuitApplication) {
+        if (terminationActions_.quitApplication) {
+            terminationActions_.quitApplication();
+        } else {
+            QCoreApplication::quit();
+        }
+        return;
+    }
+
+    terminationInProgress_ = false;
+    start();
 }
 
 QString AppController::displayMessage(const AuthError &error)

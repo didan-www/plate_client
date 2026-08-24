@@ -97,7 +97,8 @@ void AppControllerLoginTest::restoresLastSuccessfulUsername()
                        QUuid::createUuid(),
                        &transport,
                        &sessions);
-    AppController controller(&auth, &reopened, [](const QString &) { return new QWidget; });
+    AppController controller(&auth, &sessions, &reopened,
+                             [](const QString &) { return new QWidget; });
     controller.start();
 
     QCOMPARE(controller.loginWindow()->username(), QStringLiteral("remembered-user"));
@@ -119,7 +120,8 @@ void AppControllerLoginTest::loginFailureRestoresFormAndAllowsRetry()
     HttpClient transport;
     SessionService sessions;
     AuthApiClient auth(server.url(), QUuid::createUuid(), &transport, &sessions);
-    AppController controller(&auth, &settings, [](const QString &) { return new QWidget; });
+    AppController controller(&auth, &sessions, &settings,
+                             [](const QString &) { return new QWidget; });
     controller.start();
 
     LoginWindow *login = controller.loginWindow();
@@ -160,7 +162,8 @@ void AppControllerLoginTest::successfulLoginCreatesWindowWithoutMqttAndStoresOnl
     });
     AuthApiClient auth(server.url(), QUuid::createUuid(), &transport, &sessions);
     QString factoryDisplayName;
-    AppController controller(&auth, &settings, [&factoryDisplayName](const QString &displayName) {
+    AppController controller(&auth, &sessions, &settings,
+                             [&factoryDisplayName](const QString &displayName) {
         factoryDisplayName = displayName;
         auto *window = new QWidget;
         window->setObjectName(QStringLiteral("placeholderWindow"));
@@ -212,7 +215,8 @@ void AppControllerLoginTest::delayedRequestCannotBeSubmittedTwice()
     HttpClient transport;
     SessionService sessions;
     AuthApiClient auth(server.url(), QUuid::createUuid(), &transport, &sessions);
-    AppController controller(&auth, &settings, [](const QString &) { return new QWidget; });
+    AppController controller(&auth, &sessions, &settings,
+                             [](const QString &) { return new QWidget; });
     controller.start();
     LoginWindow *login = controller.loginWindow();
     login->setUsername(QStringLiteral("operator"));
@@ -238,7 +242,8 @@ void AppControllerLoginTest::destructionCancelsActiveLogin()
     SessionService sessions;
     AuthApiClient auth(server.url(), QUuid::createUuid(), &transport, &sessions);
     bool factoryCalled = false;
-    auto *controller = new AppController(&auth, &settings, [&factoryCalled](const QString &) {
+    auto *controller = new AppController(&auth, &sessions, &settings,
+                                         [&factoryCalled](const QString &) {
         factoryCalled = true;
         return new QWidget;
     });

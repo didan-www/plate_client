@@ -75,11 +75,7 @@ bool HeartbeatService::requestInFlight() const noexcept
 
 void HeartbeatService::stop()
 {
-    if (!running_ && !activeRequest_) {
-        return;
-    }
-    running_ = false;
-    heartbeatTimer_.stop();
+    stopScheduling();
     sessionGeneration_ = 0;
     consecutiveFailureCount_ = 0;
     QPointer<HeartbeatRequestHandle> request = activeRequest_;
@@ -87,6 +83,12 @@ void HeartbeatService::stop()
     if (request) {
         request->cancel();
     }
+}
+
+void HeartbeatService::stopScheduling()
+{
+    running_ = false;
+    heartbeatTimer_.stop();
 }
 
 void HeartbeatService::activate(const SessionSummary &summary)

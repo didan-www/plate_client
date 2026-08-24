@@ -8,9 +8,11 @@
 #include "ui/widgets/NavigationSidebar.h"
 
 #include <QApplication>
+#include <QCloseEvent>
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMetaMethod>
 #include <QMouseEvent>
 #include <QShowEvent>
 #include <QStackedWidget>
@@ -363,6 +365,20 @@ HistoryPage *MainWindow::historyPage() const noexcept
 AccessListPage *MainWindow::accessListPage() const noexcept
 {
     return accessListPage_;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!isSignalConnected(QMetaMethod::fromSignal(&MainWindow::closeRequested))) {
+        QMainWindow::closeEvent(event);
+        return;
+    }
+    event->ignore();
+    if (closeRequested_) {
+        return;
+    }
+    closeRequested_ = true;
+    emit closeRequested();
 }
 
 bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)

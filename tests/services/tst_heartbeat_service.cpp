@@ -125,6 +125,7 @@ private slots:
     void countsOnlyConnectivityFailuresAndRecoversOnAnyHttpResponse();
     void countsTlsAndTimeoutFailures();
     void unauthorizedInvalidatesSessionAndStops();
+    void stopSchedulingDefersInFlightCancellation();
     void sessionInvalidationCancelsInFlightRequest();
 };
 
@@ -190,16 +191,21 @@ void HeartbeatServiceTest::businessErrorsPreserveReachability()
                            &transport, &sessions);
     HeartbeatService service(&api, &transport, &sessions, 40ms);
     QSignalSpy failures(&service, &HeartbeatService::heartbeatFailed);
+    connect(&service, &HeartbeatService::heartbeatFailed, &service,
+            [&service, &failures](const HeartbeatError &) {
+                if (failures.count() >= 2) {
+                    service.stopScheduling();
+                }
+            });
 
     QVERIFY(sessions.establishSession(session()));
-    QTRY_COMPARE(failures.count(), 1);
+    QTRY_COMPARE(failures.count(), 2);
     const HeartbeatError first = heartbeatErrorFrom(failures, 0);
     QCOMPARE(first.code(), HeartbeatErrorCode::ClientRejected);
     QCOMPARE(first.serverCode(), QStringLiteral("FORBIDDEN"));
     QCOMPARE(service.state(), HttpConnectivityState::Online);
     QCOMPARE(service.consecutiveFailureCount(), 0);
 
-    QTRY_COMPARE(failures.count(), 2);
     const HeartbeatError second = heartbeatErrorFrom(failures, 1);
     QCOMPARE(second.code(), HeartbeatErrorCode::ServerError);
     QCOMPARE(second.serverCode(), QStringLiteral("UNAVAILABLE"));
@@ -215,6 +221,7 @@ void HeartbeatServiceTest::countsOnlyConnectivityFailuresAndRecoversOnAnyHttpRes
     server.enqueueResponse(disconnectedResponse());
     server.enqueueResponse(disconnectedResponse());
     server.enqueueResponse(disconnectedResponse());
+    server.enqueueResponse(jsonResponse(200, envelope(), 1000));
     SessionService sessions;
     HttpClient transport([&sessions](const RequestContext &context) {
         return sessions.isCurrent(context);
@@ -226,6 +233,7 @@ void HeartbeatServiceTest::countsOnlyConnectivityFailuresAndRecoversOnAnyHttpRes
 
     QTRY_COMPARE(service.state(), HttpConnectivityState::Abnormal);
     QCOMPARE(service.consecutiveFailureCount(), 3);
+    QTRY_COMPARE(server.requests().size(), 4);
 
     server.enqueueResponse(jsonResponse(404,
                                         envelope(false,
@@ -243,8 +251,9 @@ void HeartbeatServiceTest::countsOnlyConnectivityFailuresAndRecoversOnAnyHttpRes
     QCOMPARE(service.state(), HttpConnectivityState::Online);
     QCOMPARE(service.consecutiveFailureCount(), 0);
 
+    const qsizetype requestsBeforeProtocolError = server.requests().size();
     server.enqueueResponse(jsonResponse(200, QByteArrayLiteral("{bad")));
-    QTRY_VERIFY(server.requests().size() >= 5);
+    QTRY_VERIFY(server.requests().size() > requestsBeforeProtocolError);
     QTRY_COMPARE(service.state(), HttpConnectivityState::Online);
     QCOMPARE(service.consecutiveFailureCount(), 0);
     sessions.clear();
@@ -313,6 +322,32 @@ void HeartbeatServiceTest::unauthorizedInvalidatesSessionAndStops()
     QVERIFY(!service.isRunning());
     QVERIFY(!service.requestInFlight());
     QCOMPARE(service.consecutiveFailureCount(), 0);
+}
+
+void HeartbeatServiceTest::stopSchedulingDefersInFlightCancellation()
+{
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    server.enqueueResponse(jsonResponse(200, envelope(), 200));
+    SessionService sessions;
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    HeartbeatApiClient api(server.url(), QUuid::createUuid(), QStringLiteral("0.1.1"),
+                           &transport, &sessions);
+    HeartbeatService service(&api, &transport, &sessions, 10s);
+
+    QVERIFY(sessions.establishSession(session()));
+    QTRY_VERIFY(service.requestInFlight());
+    service.stopScheduling();
+    QVERIFY(!service.isRunning());
+    QVERIFY(service.requestInFlight());
+
+    transport.cancelAll();
+    QTRY_VERIFY(!service.requestInFlight());
+    service.stop();
+    QVERIFY(!service.requestInFlight());
+    sessions.clear();
 }
 
 void HeartbeatServiceTest::sessionInvalidationCancelsInFlightRequest()

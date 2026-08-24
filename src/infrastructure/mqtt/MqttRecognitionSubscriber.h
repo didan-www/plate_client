@@ -74,6 +74,8 @@ public:
     [[nodiscard]] int scheduledReconnectSeconds() const noexcept;
     [[nodiscard]] bool isRunning() const noexcept;
 
+    void stopReconnect();
+    void disconnectAndClear();
     void stop();
 
 signals:

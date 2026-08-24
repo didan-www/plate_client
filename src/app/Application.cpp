@@ -22,6 +22,7 @@
 #include "ui/windows/MainWindow.h"
 
 #include <QMessageBox>
+#include <QCoreApplication>
 #include <QSettings>
 #include <QWidget>
 
@@ -198,9 +199,28 @@ bool Application::initialize(BootstrapConfigLoadResult result)
             return window;
         };
     }
+    AppController::TerminationActions terminationActions;
+    terminationActions.stopScheduling = [heartbeat = heartbeatService_.get(),
+                                         mqtt = mqttSubscriber_.get()] {
+        heartbeat->stopScheduling();
+        mqtt->stopReconnect();
+    };
+    terminationActions.cancelAsync = [images = imageLoadService_.get(),
+                                      csv = csvDownloadService_.get(),
+                                      http = httpClient_.get()] {
+        images->cancel();
+        csv->cancelActive();
+        http->cancelAll();
+    };
+    terminationActions.disconnectMqtt = [mqtt = mqttSubscriber_.get()] {
+        mqtt->disconnectAndClear();
+    };
+    terminationActions.quitApplication = [] { QCoreApplication::quit(); };
     controller_ = std::make_unique<AppController>(authApiClient_.get(),
+                                                  sessionService_.get(),
                                                   settings_.get(),
-                                                  std::move(authenticatedWindowFactory));
+                                                  std::move(authenticatedWindowFactory),
+                                                  std::move(terminationActions));
     controller_->start();
     return true;
 }

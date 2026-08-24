@@ -155,6 +155,7 @@ private slots:
     void reportsOnlyObservedHttpResponses();
     void rejectsRedirectsWithoutFollowing();
     void distinguishesNetworkTlsTimeoutAndCancellation();
+    void cancelAllUsesCallTimeSnapshot();
     void destroyingHandleStopsRequestWithoutCallback();
     void rejectsStaleAndOutOfOrderResponses();
 };
@@ -559,6 +560,32 @@ void HttpClientTest::distinguishesNetworkTlsTimeoutAndCancellation()
     QCOMPARE(errorFrom(cancelled).code(), HttpErrorCode::Cancelled);
     QTest::qWait(50);
     QCOMPARE(cancelled.count(), 1);
+}
+
+void HttpClientTest::cancelAllUsesCallTimeSnapshot()
+{
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    MockHttpResponse delayed = jsonResponse();
+    delayed.initialDelayMs = 200;
+    server.enqueueResponse(delayed);
+    server.enqueueResponse(jsonResponse());
+    HttpClient client;
+
+    HttpRequestHandle *oldRequest = client.send(jsonGet(server.url(QStringLiteral("/old"))));
+    QSignalSpy oldFailure(oldRequest, &HttpRequestHandle::failed);
+    QSignalSpy oldSuccess(oldRequest, &HttpRequestHandle::succeeded);
+    client.cancelAll();
+    QCOMPARE(oldFailure.count(), 1);
+    QCOMPARE(errorFrom(oldFailure).code(), HttpErrorCode::Cancelled);
+    QCOMPARE(oldSuccess.count(), 0);
+
+    HttpRequestHandle *newRequest = client.send(jsonGet(server.url(QStringLiteral("/new"))));
+    QSignalSpy newSuccess(newRequest, &HttpRequestHandle::succeeded);
+    QSignalSpy newFailure(newRequest, &HttpRequestHandle::failed);
+    QVERIFY(newSuccess.wait());
+    QCOMPARE(newFailure.count(), 0);
+    QCOMPARE(oldFailure.count(), 1);
 }
 
 void HttpClientTest::destroyingHandleStopsRequestWithoutCallback()

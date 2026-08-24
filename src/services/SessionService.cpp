@@ -17,6 +17,57 @@ QDateTime systemNow()
 }
 } // namespace
 
+SessionTerminationContext::SessionTerminationContext(QString accessToken,
+                                                     quint64 generation)
+    : accessToken_(std::move(accessToken))
+    , generation_(generation)
+{
+}
+
+SessionTerminationContext::SessionTerminationContext(SessionTerminationContext &&other) noexcept
+    : accessToken_(std::move(other.accessToken_))
+    , generation_(other.generation_)
+{
+    other.clearSensitiveData();
+    other.generation_ = 0;
+}
+
+SessionTerminationContext &SessionTerminationContext::operator=(
+    SessionTerminationContext &&other) noexcept
+{
+    if (this != &other) {
+        clearSensitiveData();
+        accessToken_ = std::move(other.accessToken_);
+        generation_ = other.generation_;
+        other.clearSensitiveData();
+        other.generation_ = 0;
+    }
+    return *this;
+}
+
+SessionTerminationContext::~SessionTerminationContext()
+{
+    clearSensitiveData();
+}
+
+quint64 SessionTerminationContext::generation() const noexcept
+{
+    return generation_;
+}
+
+QString SessionTerminationContext::takeAccessToken() noexcept
+{
+    QString result = std::move(accessToken_);
+    accessToken_.clear();
+    return result;
+}
+
+void SessionTerminationContext::clearSensitiveData() noexcept
+{
+    accessToken_.fill(QChar::Null);
+    accessToken_.clear();
+}
+
 SessionService::SessionService(QObject *parent)
     : SessionService(systemNow, parent)
 {
@@ -28,7 +79,7 @@ SessionService::SessionService(Clock clock, QObject *parent)
 {
     expiryTimer_.setSingleShot(true);
     connect(&expiryTimer_, &QTimer::timeout, this, [this] {
-        if (session_) {
+        if (state_ == State::Active && session_) {
             expireIfCurrent(session_->generation());
         }
     });
@@ -40,15 +91,16 @@ bool SessionService::establishSession(SessionContext session)
         || session.expiresAt() <= clock_()) {
         return false;
     }
-    if (session_) {
-        invalidate(SessionInvalidationReason::Replaced);
+    if (state_ == State::LoggingOut) {
+        return false;
     }
-    ++generationCounter_;
-    if (generationCounter_ == 0) {
-        ++generationCounter_;
+    if (state_ == State::Active) {
+        clear(SessionInvalidationReason::Replaced);
     }
+    advanceGeneration();
     session.generation_ = generationCounter_;
     session_.emplace(std::move(session));
+    state_ = State::Active;
     scheduleExpiry();
     emit sessionActivated(*summary());
     return true;
@@ -56,12 +108,12 @@ bool SessionService::establishSession(SessionContext session)
 
 bool SessionService::hasActiveSession() const noexcept
 {
-    return session_.has_value();
+    return state_ == State::Active && session_.has_value();
 }
 
 std::optional<SessionSummary> SessionService::summary() const
 {
-    if (!session_) {
+    if (state_ != State::Active || !session_) {
         return std::nullopt;
     }
     return SessionSummary(session_->displayName(), session_->expiresAt(), session_->generation());
@@ -69,21 +121,24 @@ std::optional<SessionSummary> SessionService::summary() const
 
 quint64 SessionService::currentGeneration() const noexcept
 {
-    return session_ ? session_->generation() : generationCounter_;
+    return state_ == State::Active && session_ ? session_->generation() : generationCounter_;
 }
 
 bool SessionService::isCurrent(const RequestContext &context) const noexcept
 {
     if (context.sessionGeneration() == 0) {
-        return !session_ && context.operation() == QStringLiteral("auth.login");
+        return state_ == State::Inactive && !session_
+               && context.operation() == QStringLiteral("auth.login");
     }
-    return session_ && context.sessionGeneration() == session_->generation();
+    return state_ == State::Active && session_
+           && context.sessionGeneration() == session_->generation();
 }
 
 bool SessionService::withAccessToken(quint64 generation,
                                      const AccessTokenConsumer &consumer) const
 {
-    if (!session_ || generation != session_->generation() || !consumer) {
+    if (state_ != State::Active || !session_
+        || generation != session_->generation() || !consumer) {
         return false;
     }
     consumer(session_->accessToken());
@@ -93,7 +148,8 @@ bool SessionService::withAccessToken(quint64 generation,
 bool SessionService::withMqttCredentials(quint64 generation,
                                          const MqttCredentialsConsumer &consumer) const
 {
-    if (!session_ || generation != session_->generation() || !consumer) {
+    if (state_ != State::Active || !session_
+        || generation != session_->generation() || !consumer) {
         return false;
     }
     consumer(session_->mqttHost(),
@@ -107,34 +163,70 @@ bool SessionService::withMqttCredentials(quint64 generation,
 
 void SessionService::handleUnauthorized(quint64 sessionGeneration)
 {
-    if (session_ && sessionGeneration == session_->generation()) {
-        invalidate(SessionInvalidationReason::Unauthorized);
+    if (state_ == State::Active && session_
+        && sessionGeneration == session_->generation()) {
+        requestTermination(SessionInvalidationReason::Unauthorized);
     }
+}
+
+std::optional<SessionTerminationContext>
+SessionService::beginTermination(SessionInvalidationReason reason)
+{
+    if (state_ != State::Active || !session_) {
+        return std::nullopt;
+    }
+
+    expiryTimer_.stop();
+    state_ = State::LoggingOut;
+    terminationRequestPending_ = false;
+    terminationReason_ = reason;
+    terminatingGeneration_ = session_->generation();
+    QString accessToken = std::move(session_->accessToken_);
+    advanceGeneration();
+    return SessionTerminationContext(std::move(accessToken), terminatingGeneration_);
+}
+
+void SessionService::completeTermination(quint64 generation)
+{
+    if (state_ != State::LoggingOut || !session_ || !terminationReason_
+        || generation == 0 || generation != terminatingGeneration_) {
+        return;
+    }
+
+    const SessionInvalidationReason reason = *terminationReason_;
+    session_.reset();
+    state_ = State::Inactive;
+    terminationReason_.reset();
+    terminatingGeneration_ = 0;
+    emit sessionInvalidated(reason, generation);
 }
 
 LogoutRequestHandle *SessionService::logout(AuthApiClient *authApiClient)
 {
-    if (!session_) {
+    auto termination = beginTermination(SessionInvalidationReason::LoggedOut);
+    if (!termination) {
         return nullptr;
     }
     LogoutRequestHandle *handle = nullptr;
     if (authApiClient) {
-        handle = authApiClient->logout(session_->accessToken(), session_->generation());
+        handle = authApiClient->logout(termination->takeAccessToken(),
+                                       termination->generation());
     }
-    invalidate(SessionInvalidationReason::LoggedOut);
+    completeTermination(termination->generation());
     return handle;
 }
 
 void SessionService::clear(SessionInvalidationReason reason)
 {
-    if (session_) {
-        invalidate(reason);
+    auto termination = beginTermination(reason);
+    if (termination) {
+        completeTermination(termination->generation());
     }
 }
 
 void SessionService::scheduleExpiry()
 {
-    if (!session_) {
+    if (state_ != State::Active || !session_) {
         return;
     }
     const qint64 remaining = clock_().msecsTo(session_->expiresAt());
@@ -148,27 +240,38 @@ void SessionService::scheduleExpiry()
 
 void SessionService::expireIfCurrent(quint64 generation)
 {
-    if (!session_ || session_->generation() != generation) {
+    if (state_ != State::Active || !session_ || session_->generation() != generation) {
         return;
     }
     if (session_->expiresAt() > clock_()) {
         scheduleExpiry();
         return;
     }
-    invalidate(SessionInvalidationReason::Expired);
+    requestTermination(SessionInvalidationReason::Expired);
 }
 
-void SessionService::invalidate(SessionInvalidationReason reason)
+void SessionService::requestTermination(SessionInvalidationReason reason)
 {
-    if (!session_) {
+    if (state_ != State::Active || !session_ || terminationRequestPending_) {
         return;
     }
-    expiryTimer_.stop();
-    const quint64 invalidatedGeneration = session_->generation();
-    session_.reset();
+    terminationRequestPending_ = true;
+    const quint64 generation = session_->generation();
+    emit terminationRequested(reason, generation);
+
+    // Standalone services retain the historical immediate invalidation behavior.
+    if (state_ == State::Active && terminationRequestPending_) {
+        auto termination = beginTermination(reason);
+        if (termination) {
+            completeTermination(termination->generation());
+        }
+    }
+}
+
+void SessionService::advanceGeneration()
+{
     ++generationCounter_;
     if (generationCounter_ == 0) {
         ++generationCounter_;
     }
-    emit sessionInvalidated(reason, invalidatedGeneration);
 }

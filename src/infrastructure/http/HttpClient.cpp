@@ -172,6 +172,11 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
 {
     Q_ASSERT(QThread::currentThread() == thread());
     auto *handle = new HttpRequestHandle(this);
+    activeHandles_.insert(handle);
+    connect(handle, &HttpRequestHandle::finished, this,
+            [this, handle] { activeHandles_.remove(handle); });
+    connect(handle, &QObject::destroyed, this,
+            [this, handle] { activeHandles_.remove(handle); });
     auto *state = new RequestState(std::move(request), contextValidator_, handle);
     connect(handle, &HttpRequestHandle::finished, handle, &QObject::deleteLater);
 
@@ -518,4 +523,14 @@ HttpRequestHandle *HttpClient::send(HttpRequest &&request)
     state->timer.start(timerInterval);
     QTimer::singleShot(0, handle, checkDeclaredLength);
     return handle;
+}
+
+void HttpClient::cancelAll()
+{
+    const QList<HttpRequestHandle *> handles = activeHandles_.values();
+    for (HttpRequestHandle *handle : handles) {
+        if (activeHandles_.contains(handle)) {
+            handle->cancel();
+        }
+    }
 }

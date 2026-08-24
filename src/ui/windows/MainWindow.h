@@ -10,6 +10,7 @@ class ImageLoadService;
 class HistoryPage;
 class HistoryService;
 class NavigationSidebar;
+class QCloseEvent;
 class QShowEvent;
 class QStackedWidget;
 class RealtimePage;
@@ -52,8 +53,10 @@ public:
 
 signals:
     void logoutRequested();
+    void closeRequested();
 
 protected:
+    void closeEvent(QCloseEvent *event) override;
     bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     void showEvent(QShowEvent *event) override;
 
@@ -64,4 +67,5 @@ private:
     HistoryPage *historyPage_ = nullptr;
     AccessListPage *accessListPage_ = nullptr;
     bool firstShow_ = true;
+    bool closeRequested_ = false;
 };
