@@ -94,7 +94,7 @@ void MockHttpServer::acceptConnection()
         socket->setParent(this);
         connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
         auto incoming = std::make_shared<IncomingRequest>();
-        connect(socket, &QTcpSocket::readyRead, socket, [this, socket, incoming] {
+        const auto consumeAvailable = [this, socket, incoming] {
             if (incoming->completed) {
                 return;
             }
@@ -122,7 +122,10 @@ void MockHttpServer::acceptConnection()
             incoming->completed = true;
             emit requestReceived();
             consumeRequest(socket);
-        });
+        };
+        connect(socket, &QTcpSocket::readyRead, socket, consumeAvailable);
+        consumeAvailable();
+        QTimer::singleShot(0, socket, consumeAvailable);
     }
 }
 

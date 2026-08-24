@@ -232,6 +232,46 @@ add_executable(
     support/MockHttpServer.cpp
 )
 
+add_executable(
+    tst_integration_realtime_flow
+    integration/tst_realtime_flow.cpp
+    integration/MockPlateServer.h
+    integration/MockPlateServer.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
+    tst_integration_history_and_csv_flow
+    integration/tst_history_and_csv_flow.cpp
+    integration/MockPlateServer.h
+    integration/MockPlateServer.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
+    tst_integration_access_list_flow
+    integration/tst_access_list_flow.cpp
+    integration/MockPlateServer.h
+    integration/MockPlateServer.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
+add_executable(
+    tst_integration_independent_connectivity
+    integration/tst_independent_connectivity.cpp
+    integration/MockPlateServer.h
+    integration/MockPlateServer.cpp
+    support/MockHttpServer.h
+    support/MockHttpServer.cpp
+    support/MockMqttClient.h
+)
+
 plate_client_apply_project_options(tst_smoke)
 plate_client_apply_project_options(tst_bootstrap_config)
 plate_client_apply_project_options(tst_technical_logger)
@@ -269,6 +309,10 @@ plate_client_apply_project_options(tst_app_controller_login)
 plate_client_apply_project_options(tst_application_startup)
 plate_client_apply_project_options(tst_logout_lifecycle)
 plate_client_apply_project_options(tst_async_destruction)
+plate_client_apply_project_options(tst_integration_realtime_flow)
+plate_client_apply_project_options(tst_integration_history_and_csv_flow)
+plate_client_apply_project_options(tst_integration_access_list_flow)
+plate_client_apply_project_options(tst_integration_independent_connectivity)
 
 target_link_libraries(
     tst_smoke
@@ -604,6 +648,21 @@ target_link_libraries(
         Qt6::Test
 )
 
+foreach(target
+        tst_integration_realtime_flow
+        tst_integration_history_and_csv_flow
+        tst_integration_access_list_flow
+        tst_integration_independent_connectivity)
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(
+        ${target}
+        PRIVATE
+            plate_client_app
+            Qt6::Network
+            Qt6::Test
+    )
+endforeach()
+
 add_test(NAME unit.smoke COMMAND tst_smoke)
 add_test(NAME unit.bootstrap_config COMMAND tst_bootstrap_config)
 add_test(NAME unit.technical_logger COMMAND tst_technical_logger)
@@ -656,6 +715,10 @@ add_test(NAME unit.application_startup COMMAND tst_application_startup)
 add_test(NAME unit.logout_lifecycle COMMAND tst_logout_lifecycle)
 add_test(NAME unit.async_destruction COMMAND tst_async_destruction)
 add_test(NAME app.startup COMMAND $<TARGET_FILE:plate_client> --smoke-test)
+add_test(NAME integration.realtime_flow COMMAND tst_integration_realtime_flow)
+add_test(NAME integration.history_and_csv_flow COMMAND tst_integration_history_and_csv_flow)
+add_test(NAME integration.access_list_flow COMMAND tst_integration_access_list_flow)
+add_test(NAME integration.independent_connectivity COMMAND tst_integration_independent_connectivity)
 
 set_tests_properties(
     unit.smoke
@@ -710,8 +773,22 @@ set_tests_properties(
     unit.logout_lifecycle
     unit.async_destruction
     app.startup
+    integration.realtime_flow
+    integration.history_and_csv_flow
+    integration.access_list_flow
+    integration.independent_connectivity
     PROPERTIES
         TIMEOUT 10
+)
+
+set_tests_properties(
+    integration.realtime_flow
+    integration.history_and_csv_flow
+    integration.access_list_flow
+    integration.independent_connectivity
+    PROPERTIES
+        LABELS integration
+        TIMEOUT 15
 )
 
 set_tests_properties(
