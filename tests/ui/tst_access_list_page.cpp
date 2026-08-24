@@ -8,6 +8,8 @@
 #include "ui/pages/AccessListPage.h"
 #include "ui/widgets/AccessListCreateDialog.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -110,6 +112,25 @@ struct Harness final
                                                     transport.get(),
                                                     &sessions);
         service = std::make_unique<AccessListService>(api.get(), &sessions);
+    }
+
+    ~Harness()
+    {
+        cleanup();
+    }
+
+    void cleanup()
+    {
+        if (!page) {
+            return;
+        }
+        if (AccessListCreateDialog *dialog = page->activeCreateDialog()) {
+            dialog->close();
+        }
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        page->close();
+        page.reset();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     }
 
     void createPage(AccessListPage::DeleteConfirmer confirmer = {})

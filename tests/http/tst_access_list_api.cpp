@@ -144,6 +144,7 @@ class AccessListApiTest final : public QObject
 private slots:
     void initTestCase();
     void encodesAllRoutesAndContexts();
+    void emptyKeywordUsesExplicitEqualsDelimiter();
     void rejectsUncorrelatedSuccessResponses();
     void mapsNotFoundStableConflictsAndUnauthorized();
     void unauthorizedSynchronousApiDeletionIsSafe();
@@ -234,6 +235,31 @@ void AccessListApiTest::encodesAllRoutesAndContexts()
     QCOMPARE(server.requests().at(3).target,
              QByteArrayLiteral("/gateway/api/v1/access-lists/3"));
     QVERIFY(server.requests().at(3).body.isEmpty());
+}
+
+void AccessListApiTest::emptyKeywordUsesExplicitEqualsDelimiter()
+{
+    MockHttpServer server;
+    QVERIFY(server.listen());
+    server.enqueueResponse(jsonResponse(200, pageEnvelope(1, {}, 0)));
+    SessionService sessions;
+    QVERIFY(sessions.establishSession(session()));
+    HttpClient transport([&sessions](const RequestContext &context) {
+        return sessions.isCurrent(context);
+    });
+    AccessListApiClient api(server.url(), &transport, &sessions);
+
+    auto *request = api.getPage(AccessListType::White,
+                                {}, 1, sessions.currentGeneration(), 1);
+    QSignalSpy succeeded(request, &AccessListPageRequestHandle::succeeded);
+    QVERIFY(succeeded.wait());
+    QTRY_COMPARE(server.requests().size(), 1);
+
+    const QByteArray target = server.requests().constFirst().target;
+    QCOMPARE(target,
+             QByteArrayLiteral("/api/v1/access-lists?listType=WHITE&keyword=&page=1&pageSize=100"));
+    QVERIFY(target.contains(QByteArrayLiteral("&keyword=&")));
+    QVERIFY(!target.contains(QByteArrayLiteral("&keyword&page=")));
 }
 
 void AccessListApiTest::rejectsUncorrelatedSuccessResponses()

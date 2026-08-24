@@ -811,7 +811,8 @@ QUrl AccessListApiClient::pageEndpoint(AccessListType listType,
     result.setPath(endpointPrefix(result) + QStringLiteral("/api/v1/access-lists"));
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("listType"), listTypeText(listType));
-    query.addQueryItem(QStringLiteral("keyword"), keyword);
+    query.addQueryItem(QStringLiteral("keyword"),
+                       keyword.isNull() ? QStringLiteral("") : keyword);
     query.addQueryItem(QStringLiteral("page"), QString::number(page));
     query.addQueryItem(QStringLiteral("pageSize"), QStringLiteral("100"));
     result.setQuery(query);
