@@ -57,7 +57,7 @@ RecognitionSnapshot snapshot(const QString &id,
                                QStringLiteral("device-%1").arg(id),
                                status,
                                succeeded
-                                   ? std::optional<QString>(QStringLiteral("京A12345"))
+                                   ? std::optional<QString>(QStringLiteral("陕U806RG"))
                                    : std::nullopt,
                                failed ? std::optional<QString>(QStringLiteral("MODEL_ERROR"))
                                       : std::nullopt,
@@ -226,7 +226,7 @@ void RealtimePageTest::initialProcessingFinalAndOldFinalStates()
                              snapshot(QStringLiteral("current"), 2,
                                       RecognitionStatus::Succeeded, currentTime, 1250)));
     QCOMPARE(status->text(), QStringLiteral("已识别完成"));
-    QCOMPARE(plate->text(), QStringLiteral("京A12345"));
+    QCOMPARE(plate->text(), QStringLiteral("陕U·806RG"));
     QCOMPARE(error->text(), QStringLiteral("--"));
     QCOMPARE(captured->text(), currentTime.toString(Qt::ISODate));
     QCOMPARE(duration->text(), QStringLiteral("1250 ms"));
@@ -311,7 +311,7 @@ void RealtimePageTest::failureRetryDoesNotBlockFinalState()
                              snapshot(QStringLiteral("retry"), 2,
                                       RecognitionStatus::Succeeded, capturedAt, 777)));
     QCOMPARE(status->text(), QStringLiteral("已识别完成"));
-    QCOMPARE(plate->text(), QStringLiteral("京A12345"));
+    QCOMPARE(plate->text(), QStringLiteral("陕U·806RG"));
     QCOMPARE(duration->text(), QStringLiteral("777 ms"));
     QTRY_VERIFY(!image->pixmap().isNull());
     QVERIFY(!retry->isVisible());

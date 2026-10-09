@@ -368,7 +368,7 @@ stateDiagram-v2
 
 - 无当前记录：显示“未启动识别”。
 - 当前快照为 `PROCESSING`：显示“识别中”。
-- 当前快照为 `SUCCEEDED`：显示“已识别完成”和车牌号。
+- 当前快照为 `SUCCEEDED`：显示“已识别完成”和车牌号。对以省份简称和 ASCII 大写城市字母开头的识别结果，`RealtimePage` 与实时/历史 `RecognitionTableModel` 统一在前两个字符后插入 `·`；该转换只产生展示文本，不回写 `RecognitionSnapshot`，也不用于查询、名单、CSV 或业务比较。
 - 当前快照为 `FAILED`：显示“已识别完成”和红色错误信息。
 
 ## 10. 登录时序

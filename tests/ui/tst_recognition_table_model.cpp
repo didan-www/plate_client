@@ -5,6 +5,7 @@
 #include "services/SessionService.h"
 #include "infrastructure/http/HttpClient.h"
 #include "infrastructure/http/RecognitionApiClient.h"
+#include "ui/PlateNumberFormatter.h"
 #include "ui/models/RecognitionTableModel.h"
 
 #include <QSignalSpy>
@@ -38,7 +39,7 @@ RecognitionSnapshot snapshot(const QString &id,
                                device,
                                status,
                                succeeded
-                                   ? std::optional<QString>(QStringLiteral("京A12345"))
+                                   ? std::optional<QString>(QStringLiteral("陕U806RG"))
                                    : std::nullopt,
                                failed ? std::optional<QString>(QStringLiteral("MODEL_ERROR"))
                                       : std::nullopt,
@@ -60,11 +61,28 @@ class RecognitionTableModelTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void formatsOnlySupportedRecognitionPlateValues();
     void exposesFixedReadOnlyFiveColumnContract();
     void mapsStoreItemsAndCapturedTime();
     void followsUpdatesAndStoreLimitWithoutCopyingItems();
     void exposesHistoryTenColumnContractWithoutBusinessCopy();
 };
+
+void RecognitionTableModelTest::formatsOnlySupportedRecognitionPlateValues()
+{
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("陕U806RG")),
+             QStringLiteral("陕U·806RG"));
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("京A12345")),
+             QStringLiteral("京A·12345"));
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("京A·12345")),
+             QStringLiteral("京A·12345"));
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("京112345")),
+             QStringLiteral("京112345"));
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("TEST123")),
+             QStringLiteral("TEST123"));
+    QCOMPARE(formatPlateNumberForDisplay(QStringLiteral("--")), QStringLiteral("--"));
+    QCOMPARE(formatPlateNumberForDisplay(QString()), QString());
+}
 
 void RecognitionTableModelTest::exposesFixedReadOnlyFiveColumnContract()
 {
@@ -154,7 +172,7 @@ void RecognitionTableModelTest::mapsStoreItemsAndCapturedTime()
     QCOMPARE(model.data(model.index(0, RecognitionTableModel::CapturedAtColumn)).toString(),
              failureTime.toString(Qt::ISODate));
     QCOMPARE(model.data(model.index(1, RecognitionTableModel::PlateColumn)).toString(),
-             QStringLiteral("京A12345"));
+             QStringLiteral("陕U·806RG"));
     QCOMPARE(model.data(model.index(1, RecognitionTableModel::StatusColumn)).toString(),
              QStringLiteral("识别成功"));
     QCOMPARE(model.data(model.index(2, RecognitionTableModel::StatusColumn)).toString(),
@@ -196,7 +214,7 @@ void RecognitionTableModelTest::followsUpdatesAndStoreLimitWithoutCopyingItems()
                                  capturedAt.addSecs(101))));
     QCOMPARE(model.rowCount(), 100);
     QCOMPARE(model.data(model.index(0, RecognitionTableModel::PlateColumn)).toString(),
-             QStringLiteral("京A12345"));
+             QStringLiteral("陕U·806RG"));
     QCOMPARE(model.data(model.index(0, RecognitionTableModel::StatusColumn)).toString(),
              QStringLiteral("识别成功"));
 }

@@ -108,6 +108,8 @@ add_library(
 
 add_library(
     plate_client_ui STATIC
+    ui/PlateNumberFormatter.h
+    ui/PlateNumberFormatter.cpp
     ui/models/AccessListTableModel.h
     ui/models/AccessListTableModel.cpp
     ui/models/RecognitionTableModel.h

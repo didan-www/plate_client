@@ -3,3 +3,8 @@ build/
 CMakeUserPresets.json
 config/client.json
 .qtcreator/
+
+# Local archive and editor files
+/plate_client.zip
+.vs/
+.vscode/

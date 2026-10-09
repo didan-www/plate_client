@@ -2,6 +2,7 @@
 
 #include "services/RealtimeRecognitionStore.h"
 #include "services/HistoryService.h"
+#include "ui/PlateNumberFormatter.h"
 
 #include <QDateTime>
 
@@ -89,7 +90,9 @@ QVariant RecognitionTableModel::data(const QModelIndex &index, int role) const
         case HistoryDeviceColumn:
             return snapshot.deviceId();
         case HistoryPlateColumn:
-            return snapshot.plateNumber().value_or(QStringLiteral("--"));
+            return snapshot.plateNumber()
+                ? formatPlateNumberForDisplay(*snapshot.plateNumber())
+                : QStringLiteral("--");
         case HistoryStatusColumn:
             return statusText(snapshot.status());
         case HistoryErrorCodeColumn:
@@ -118,7 +121,9 @@ QVariant RecognitionTableModel::data(const QModelIndex &index, int role) const
     case DeviceColumn:
         return snapshot.deviceId();
     case PlateColumn:
-        return snapshot.plateNumber().value_or(QStringLiteral("--"));
+        return snapshot.plateNumber()
+            ? formatPlateNumberForDisplay(*snapshot.plateNumber())
+            : QStringLiteral("--");
     case StatusColumn:
         return statusText(snapshot.status());
     case CapturedAtColumn:

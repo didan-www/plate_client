@@ -3,6 +3,7 @@
 #include "domain/ImageLoadResult.h"
 #include "services/ImageLoadService.h"
 #include "services/RealtimeRecognitionStore.h"
+#include "ui/PlateNumberFormatter.h"
 #include "ui/models/RecognitionTableModel.h"
 
 #include <QAbstractItemView>
@@ -267,7 +268,9 @@ void RealtimePage::refreshCurrent()
     statusLabel_->setText(current->status() == RecognitionStatus::Processing
                               ? QStringLiteral("识别中")
                               : QStringLiteral("已识别完成"));
-    plateLabel_->setText(current->plateNumber().value_or(QStringLiteral("--")));
+    plateLabel_->setText(current->plateNumber()
+                             ? formatPlateNumberForDisplay(*current->plateNumber())
+                             : QStringLiteral("--"));
     errorLabel_->setText(failureText(*current));
     errorLabel_->setStyleSheet(current->status() == RecognitionStatus::Failed
                                    ? QStringLiteral("color: #B42318;") : QString());
